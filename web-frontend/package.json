@@ -15,7 +15,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "test:script": "ts-node src/test.ts"
   },
   "eslintConfig": {
     "extends": [
@@ -36,6 +37,8 @@
   },
   "devDependencies": {
     "prettier": "2.8.4",
-    "tailwindcss": "^3.2.7"
+    "tailwindcss": "^3.2.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   }
 }
