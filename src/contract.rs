@@ -6,11 +6,12 @@
 mod state;
 
 use linera_sdk::{
-    linera_base_types::WithContractAbi,
+    abis::fungible::{self, FungibleTokenAbi, Parameters},
+    linera_base_types::{Amount, ApplicationId, WithContractAbi},
     views::{RootView, View},
     Contract, ContractRuntime,
 };
-use lst::LstAbi;
+use lst::{LstAbi, Operation};
 
 use self::state::LstState;
 
@@ -31,7 +32,7 @@ impl WithContractAbi for LstContract {
 
 impl Contract for LstContract {
     type Message = ();
-    type InstantiationArgument = u64;
+    type InstantiationArgument = ();
     type Parameters = ();
     type EventValue = ();
 
@@ -43,19 +44,48 @@ impl Contract for LstContract {
     // ANCHOR_END: load
 
     // ANCHOR: instantiate
-    async fn instantiate(&mut self, value: u64) {
+    async fn instantiate(&mut self, _: Self::InstantiationArgument) {
         // Validate that the application parameters were configured correctly.
         self.runtime.application_parameters();
-
-        self.state.value.set(value);
     }
+
     // ANCHOR_END: instantiate
 
     // ANCHOR: execute_operation
-    async fn execute_operation(&mut self, operation: u64) -> u64 {
-        let new_value = self.state.value.get() + operation;
-        self.state.value.set(new_value);
-        new_value
+    async fn execute_operation(&mut self, operation: Self::Operation) -> Self::Response {
+        match operation {
+            Operation::Stake { owner, amount } => {
+                // Check if the user already has a stake
+                let current_amount = match self.state.stake_balances.get(&owner).await {
+                    Ok(Some(current)) => current,
+                    Ok(None) => Amount::ZERO,
+                    Err(e) => panic!("Failed to get stake balance: {}", e),
+                };
+
+                // Update the stake by adding the new amount to the existing one
+                let new_amount = current_amount.try_add(amount).expect("Failed to add stake balance");
+                self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
+
+                // self.runtime.application_parameters (authenticated, application, call)
+            }
+            Operation::Unstake { owner, amount } => {
+                // Check if the user has a stake
+                let current_amount = match self.state.stake_balances.get(&owner).await {
+                    Ok(Some(current)) => current,
+                    Ok(None) => panic!("No stake found for user"),
+                    Err(e) => panic!("Failed to get stake balance: {}", e),
+                };
+
+                // Ensure the user has enough stake to unstake
+                if current_amount < amount {
+                    panic!("Insufficient stake balance");
+                }
+
+                // Update the stake by subtracting the amount
+                let new_amount = current_amount.try_sub(amount).expect("Failed to subtract stake balance");
+                self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
+            }
+        }
     }
     // ANCHOR_END: execute_operation
 
@@ -70,68 +100,95 @@ impl Contract for LstContract {
     // ANCHOR_END: store
 }
 
+// impl LstContract {
+//     fn native_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
+//         self.runtime.application_parameters().0
+//     }
+//     fn staked_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
+//         self.runtime.application_parameters().1
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
-    use futures::FutureExt as _;
-    use linera_sdk::{util::BlockingWait, views::View, Contract, ContractRuntime};
+    //     use std::str::FromStr;
 
-    use super::{LstContract, LstState};
+    //     use futures::FutureExt as _;
+    //     use linera_sdk::{
+    //         abis::fungible::{self, FungibleTokenAbi, Parameters},
+    //         linera_base_types::{AccountOwner, AccountSecretKey, Amount, ApplicationId, Secp256k1SecretKey},
+    //         util::BlockingWait,
+    //         views::View,
+    //         Contract, ContractRuntime,
+    //     };
+    //     use lst::Operation;
 
-    // ANCHOR: counter_test
-    #[test]
-    fn operation() {
-        let runtime = ContractRuntime::new().with_application_parameters(());
-        let state = LstState::load(runtime.root_view_storage_context()).blocking_wait().expect("Failed to read from mock key value store");
-        let mut counter = LstContract { state, runtime };
+    //     use super::{LstContract, LstState};
 
-        let initial_value = 72_u64;
-        counter.instantiate(initial_value).now_or_never().expect("Initialization of counter state should not await anything");
+    //     // ANCHOR: counter_test
+    //     #[test]
+    //     fn operation() {
+    //         //     let native_params = Parameters::new("NAT");
+    //         //     let staked_params = Parameters::new("LST");
+    //         let application_id_native = ApplicationId::default().with_abi::<FungibleTokenAbi>();
+    //         let application_id_staked = ApplicationId::default().with_abi::<FungibleTokenAbi>();
 
-        let increment = 42_308_u64;
-        let response = counter.execute_operation(increment).now_or_never().expect("Execution of counter operation should not await anything");
+    //         let runtime = ContractRuntime::new().with_application_parameters((application_id_native, application_id_staked));
+    //         let state = LstState::load(runtime.root_view_storage_context()).blocking_wait().expect("Failed to read from mock key value store");
+    //         let mut counter = LstContract { state, runtime };
 
-        let expected_value = initial_value + increment;
+    //         let initial_value = ();
+    //         counter.instantiate(initial_value).now_or_never().expect("Initialization of counter state should not await anything");
 
-        assert_eq!(response, expected_value);
-        assert_eq!(*counter.state.value.get(), initial_value + increment);
-    }
+    //         //     let user_keypair = AccountSecretKey::Secp256k1(Secp256k1SecretKey::generate());
+    //         //     let user_pubkey = AccountOwner::from(user_keypair.public());
+    //         //     let response = counter
+    //         //         .execute_operation(Operation::Stake {
+    //         //             owner: user_pubkey,
+    //         //             amount: Amount::ONE,
+    //         //         })
+    //         //         .now_or_never()
+    //         //         .expect("Execution of counter operation should not await anything");
+
+    //         //     assert_eq!(response, ());
+    //     }
     // ANCHOR_END: counter_test
 
-    #[test]
-    #[should_panic(expected = "Lst application doesn't support any cross-chain messages")]
-    fn message() {
-        let initial_value = 72_u64;
-        let mut counter = create_and_instantiate_counter(initial_value);
+    // #[test]
+    // #[should_panic(expected = "Lst application doesn't support any cross-chain messages")]
+    // fn message() {
+    //     let initial_value = 72_u64;
+    //     let mut counter = create_and_instantiate_counter(initial_value);
 
-        counter.execute_message(()).now_or_never().expect("Execution of counter operation should not await anything");
-    }
+    //     counter.execute_message(()).now_or_never().expect("Execution of counter operation should not await anything");
+    // }
 
-    #[test]
-    fn cross_application_call() {
-        let initial_value = 2_845_u64;
-        let mut counter = create_and_instantiate_counter(initial_value);
+    // #[test]
+    // fn cross_application_call() {
+    //     let initial_value = 2_845_u64;
+    //     let mut counter = create_and_instantiate_counter(initial_value);
 
-        let increment = 8_u64;
+    //     let increment = 8_u64;
 
-        let response = counter.execute_operation(increment).now_or_never().expect("Execution of counter operation should not await anything");
+    //     let response = counter.execute_operation(increment).now_or_never().expect("Execution of counter operation should not await anything");
 
-        let expected_value = initial_value + increment;
+    //     let expected_value = initial_value + increment;
 
-        assert_eq!(response, expected_value);
-        assert_eq!(*counter.state.value.get(), expected_value);
-    }
+    //     assert_eq!(response, expected_value);
+    //     assert_eq!(*counter.state.value.get(), expected_value);
+    // }
 
-    fn create_and_instantiate_counter(initial_value: u64) -> LstContract {
-        let runtime = ContractRuntime::new().with_application_parameters(());
-        let mut contract = LstContract {
-            state: LstState::load(runtime.root_view_storage_context()).blocking_wait().expect("Failed to read from mock key value store"),
-            runtime,
-        };
+    // fn create_and_instantiate_counter(initial_value: u64) -> LstContract {
+    //     let runtime = ContractRuntime::new().with_application_parameters(());
+    //     let mut contract = LstContract {
+    //         state: LstState::load(runtime.root_view_storage_context()).blocking_wait().expect("Failed to read from mock key value store"),
+    //         runtime,
+    //     };
 
-        contract.instantiate(initial_value).now_or_never().expect("Initialization of counter state should not await anything");
+    //     contract.instantiate(initial_value).now_or_never().expect("Initialization of counter state should not await anything");
 
-        assert_eq!(*contract.state.value.get(), initial_value);
+    //     assert_eq!(*contract.state.value.get(), initial_value);
 
-        contract
-    }
+    //     contract
+    // }
 }
