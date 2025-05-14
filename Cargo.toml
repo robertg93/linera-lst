@@ -12,9 +12,9 @@ serde_json = { version = "1.0" }
 
 [dev-dependencies]
 
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 linera-sdk = { git = "https://github.com/linera-io/linera-protocol", branch = "testnet_babbage", features = ["test", "wasmer"] }
 tokio = { version = "1.40", features = ["rt", "sync"] }
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 fungible = { git = "https://github.com/linera-io/linera-protocol", branch = "testnet_babbage", features = ["test"] }
 
 [[bin]]
