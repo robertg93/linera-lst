@@ -8,8 +8,9 @@ mod state;
 use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, Object, Request, Response, Schema};
+
 use linera_sdk::{graphql::GraphQLMutationRoot, linera_base_types::WithServiceAbi, views::View, Service, ServiceRuntime};
-use lst::Operation;
+use lst::{Operation, Parameters};
 
 use self::state::LstState;
 
@@ -29,7 +30,7 @@ impl WithServiceAbi for LstService {
 // ANCHOR_END: declare_abi
 
 impl Service for LstService {
-    type Parameters = ();
+    type Parameters = Parameters;
 
     // ANCHOR: new
     async fn new(runtime: ServiceRuntime<Self>) -> Self {

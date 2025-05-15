@@ -6,12 +6,11 @@
 mod state;
 
 use linera_sdk::{
-    abis::fungible::{self, FungibleTokenAbi, Parameters},
     linera_base_types::{Amount, ApplicationId, WithContractAbi},
     views::{RootView, View},
     Contract, ContractRuntime,
 };
-use lst::{LstAbi, Operation};
+use lst::{LstAbi, Operation, Parameters};
 
 use self::state::LstState;
 
@@ -33,7 +32,7 @@ impl WithContractAbi for LstContract {
 impl Contract for LstContract {
     type Message = ();
     type InstantiationArgument = ();
-    type Parameters = ();
+    type Parameters = Parameters;
     type EventValue = ();
 
     // ANCHOR: load
@@ -44,7 +43,7 @@ impl Contract for LstContract {
     // ANCHOR_END: load
 
     // ANCHOR: instantiate
-    async fn instantiate(&mut self, _: Self::InstantiationArgument) {
+    async fn instantiate(&mut self, _: ()) {
         // Validate that the application parameters were configured correctly.
         self.runtime.application_parameters();
     }

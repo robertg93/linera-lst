@@ -3,10 +3,12 @@
 
 /*! ABI of the Lst Example Application */
 
-use async_graphql::{Request, Response};
+use async_graphql::{scalar, Request, Response};
+
 use linera_sdk::{
+    abis::fungible::FungibleTokenAbi,
     graphql::GraphQLMutationRoot,
-    linera_base_types::{AccountOwner, Amount, ContractAbi, ServiceAbi},
+    linera_base_types::{AccountOwner, Amount, ApplicationId, ContractAbi, ServiceAbi},
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,3 +36,11 @@ pub enum Operation {
     /// Collect the pledges after the campaign has reached its target (campaign chain only).
     Unstake { owner: AccountOwner, amount: Amount },
 }
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct Parameters {
+    /// The token0 and token1 used for the matching engine
+    pub tokens: [ApplicationId<FungibleTokenAbi>; 2],
+}
+
+scalar!(Parameters);
