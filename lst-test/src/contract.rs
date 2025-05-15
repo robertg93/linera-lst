@@ -13,13 +13,10 @@ use linera_sdk::{
 use lst_test::{LstTestAbi, Message, Operation, Parameters};
 use state::LstTestState;
 
-// use crate::state::{KeyBook, OrderEntry};
-
 pub struct LstTestContract {
     state: LstTestState,
     runtime: ContractRuntime<Self>,
 }
-
 linera_sdk::contract!(LstTestContract);
 
 impl WithContractAbi for LstTestContract {
@@ -42,10 +39,6 @@ impl Contract for LstTestContract {
         let _ = self.runtime.application_parameters();
     }
 
-    /// Executes an order operation, or closes the chain.
-    ///
-    /// If the chain is the one of the matching engine then the order is processed
-    /// locally. Otherwise, it gets transmitted as a message to the chain of the engine.
     async fn execute_operation(&mut self, operation: Operation) -> Self::Response {
         match operation {
             Operation::ExecuteOrder => {

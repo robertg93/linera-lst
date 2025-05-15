@@ -5,10 +5,8 @@
 
 mod state;
 
-use std::ops::{Add, Sub};
-
 use linera_sdk::{
-    linera_base_types::{Amount, WithContractAbi},
+    linera_base_types::WithContractAbi,
     views::{RootView, View},
     Contract, ContractRuntime,
 };
@@ -21,11 +19,9 @@ pub struct LstContract {
 }
 linera_sdk::contract!(LstContract);
 
-// ANCHOR: declare_abi
 impl WithContractAbi for LstContract {
     type Abi = LstAbi;
 }
-// ANCHOR_END: declare_abi
 
 impl Contract for LstContract {
     type Message = Message;
