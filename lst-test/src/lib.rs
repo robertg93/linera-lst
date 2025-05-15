@@ -3,7 +3,7 @@
 
 /*! ABI of the Matching Engine Example Application */
 
-use async_graphql::{scalar, InputObject, Request, Response, SimpleObject};
+use async_graphql::{scalar, Request, Response};
 use fungible::FungibleTokenAbi;
 use linera_sdk::{
     graphql::GraphQLMutationRoot,
@@ -23,9 +23,6 @@ impl ServiceAbi for LstTestAbi {
     type QueryResponse = Response;
 }
 
-/// When the matching engine is created we need to create to
-/// trade between two tokens 0 and 1. Those two tokens
-/// are put as parameters in the creation of the matching engine
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct Parameters {
     /// The token0 and token1 used for the matching engine
@@ -34,7 +31,6 @@ pub struct Parameters {
 
 scalar!(Parameters);
 
-/// Operations that can be sent to the application.
 #[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
 pub enum Operation {
     /// The order that is going to be executed on the chain of the order book.
@@ -44,7 +40,6 @@ pub enum Operation {
     CloseChain,
 }
 
-/// Messages that can be processed by the application.
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Message {
     /// The order being transmitted from the chain and received by the chain of the order book.

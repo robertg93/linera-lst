@@ -7,7 +7,7 @@ use async_graphql::{scalar, Request, Response};
 use fungible::FungibleTokenAbi;
 use linera_sdk::{
     graphql::GraphQLMutationRoot,
-    linera_base_types::{AccountOwner, Amount, ApplicationId, ContractAbi, ServiceAbi},
+    linera_base_types::{AccountOwner, ApplicationId, ContractAbi, ServiceAbi},
 };
 use serde::{Deserialize, Serialize};
 
