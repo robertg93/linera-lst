@@ -12,80 +12,47 @@ use linera_sdk::{
 };
 use lst::{LstAbi, Operation, Parameters};
 
-/// Test transferring tokens across microchains.
-///
-/// Creates the application on a `sender_chain`, initializing it with a single account with some
-/// tokens for that chain's owner. Transfers some of those tokens to a new `receiver_chain`, and
-/// checks that the balances on each microchain are correct.
-#[tokio::test]
-async fn test_cross_chain_transfer() {
-    // // create a new validator
-    // let validator = TestValidator::new().await;
-    // // native token chain
-    // let mut fungible_chain = validator.new_chain().await;
-    // let fungible_module_id: ModuleId<FungibleTokenAbi, Parameters, InitialState> = fungible_chain.publish_bytecode_files_in("../fungible").await;
-
-    // //crete tokens
-    // let initial_amount = Amount::from_tokens(100);
-    // let owner_account = AccountOwner::from(fungible_chain.public_key());
-    // let initial_state = InitialStateBuilder::default().with_account(owner_account, initial_amount);
-    // // create native token
-    // // let params = Parameters::new("NAT");
-    // // let native_token_app_id = fungible_chain.create_application(fungible_module_id, params, initial_state.build(), vec![]).await;
-    // let (token_id, backers) = fungible::create_with_accounts(&validator, fungible_module_id, iter::repeat_n(initial_amount, 3)).await;
-
-    // // // create native token
-    // // let params = Parameters::new("LST");
-    // // let staked_token_app_id = fungible_chain.create_application(fungible_module_id, params, initial_state.build(), vec![]).await;
-
-    // // create a new chain
-    // let mut lst_active_chain = validator.new_chain().await;
-    // // publish lst module
-    // let lst_module_id: ModuleId<LstAbi, ApplicationId<FungibleTokenAbi>, ()> = lst_active_chain.publish_current_module().await;
-    // let initial_amount = Amount::from_tokens(100);
-    // // create instance of lst
-    // let application_id = lst_active_chain.create_application(lst_module_id, token_id, (), vec![token_id.forget_abi()]).await;
-
-    // let (token_id, backers) = fungible::create_with_accounts(&validator, fungible_module_id, iter::repeat_n(initial_amount, 3)).await;
-    // lst
-
-    // let increment = 15u64;
-    // chain
-    //     .add_block(|block| {
-    //         block.with_operation(application_id, ());
-    //     })
-    //     .await;
-}
-
-/// Test bouncing some tokens back to the sender.
-///
-/// Creates the application on a `sender_chain`, initializing it with a single account with some
-/// tokens for that chain's owner. Attempts to transfer some tokens to a new `receiver_chain`,
-/// but makes the `receiver_chain` reject the transfer message, causing the tokens to be
-/// returned back to the sender.
-// #[tokio::test]
-// async fn test_bouncing_tokens() {
-//     let initial_amount = Amount::from_tokens(100);
-//     let target_amount = Amount::from_tokens(220);
-//     let pledge_amount = Amount::from_tokens(75);
-
-//     let (validator, module_id) = TestValidator::with_current_module::<LstAbi, Parameters, ()>().await;
-
-//     let fungible_chain_owner = AccountSecretKey::Ed25519(Ed25519SecretKey::generate());
-//     let fungible_publisher_chain = validator.new_chain_with_keypair(fungible_chain_owner).await;
-//     let campaign_chain_owner = AccountSecretKey::Secp256k1(Secp256k1SecretKey::generate());
-//     let mut campaign_chain = validator.new_chain_with_keypair(campaign_chain_owner).await;
-//     let campaign_account = AccountOwner::from(campaign_chain.public_key());
-
-//     let fungible_module_id = fungible_publisher_chain.publish_bytecode_files_in("../fungible").await;
-
-//     let (token_id, backers) = fungible::create_with_accounts(&validator, fungible_module_id, iter::repeat_n(initial_amount, 3)).await;
-
-//     // let campaign_id = campaign_chain.create_application(module_id, (), (), vec![]).await;
+// pub async fn get_orders(application_id: ApplicationId<MatchingEngineAbi>, chain: &ActiveChain, account_owner: AccountOwner) -> Option<Vec<OrderId>> {
+//     let query = format!("query {{ accountInfo {{ entry(key: {}) {{ value {{ orders }} }} }} }}", account_owner.to_value());
+//     let QueryOutcome { response, .. } = chain.graphql_query(application_id, query).await;
+//     let orders = &response["accountInfo"]["entry"]["value"]["orders"];
+//     let values = orders.as_array()?.iter().map(|order| order.as_u64().unwrap()).collect();
+//     Some(values)
 // }
 
+/// Test creating a matching engine, pushing some orders, canceling some and
+/// seeing how the transactions went.
+///
+/// The operation is done in exactly the same way with the same amounts
+/// and quantities as the corresponding end to end test.
+///
+/// We have 3 chains:
+/// * The chain A of User_a for tokens A
+/// * The chain B of User_b for tokens B
+/// * The admin chain of the matching engine.
+///
+/// The following operations are done:
+/// * We create users and assign them their initial positions:
+///   * user_a with 10 tokens A.
+///   * user_b with 9 tokens B.
+/// * Then we create the following orders:
+///   * User_a: Offer to buy token B in exchange for token A for a price of 1 (or 2) with
+///     a quantity of 3 token B.
+///     User_a thus commits 3 * 1 + 3 * 2 = 9 token A to the matching engine chain and is
+///     left with 1 token A on chain A
+///   * User_b: Offer to sell token B in exchange for token A for a price of 2 (or 4) with
+///     a quantity of 4 token B
+///     User_b thus commits 4 + 4 = 8 token B on the matching engine chain and is left
+///     with 1 token B.
+/// * The price that is matching is 2 where a transaction can actually occur
+///   * Only 3 token B can be exchanged against 6 tokens A.
+///   * So, the order from user_b is only partially filled.
+/// * Then the orders are cancelled and the user get back their tokens.
+///   After the exchange we have
+///   * User_a: It has 9 - 6 = 3 token A and the newly acquired 3 token B.
+///   * User_b: It has 8 - 3 = 5 token B and the newly acquired 6 token A
 #[tokio::test]
-async fn test_create_lst() {
+async fn single_transaction() {
     let (validator, module_id) = TestValidator::with_current_module::<LstAbi, Parameters, ()>().await;
 
     let mut user_chain_a = validator.new_chain().await;

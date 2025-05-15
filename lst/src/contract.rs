@@ -5,6 +5,8 @@
 
 mod state;
 
+use std::ops::{Add, Sub};
+
 use linera_sdk::{
     linera_base_types::{Amount, WithContractAbi},
     views::{RootView, View},
@@ -47,12 +49,12 @@ impl Contract for LstContract {
                 // Check if the user already has a stake
                 let current_amount = match self.state.stake_balances.get(&owner).await {
                     Ok(Some(current)) => current,
-                    Ok(None) => Amount::ZERO,
+                    Ok(None) => 0,
                     Err(e) => panic!("Failed to get stake balance: {}", e),
                 };
 
                 // Update the stake by adding the new amount to the existing one
-                let new_amount = current_amount.try_add(amount).expect("Failed to add stake balance");
+                let new_amount = current_amount.add(amount);
                 self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
 
                 // self.runtime.application_parameters (authenticated, application, call)
@@ -71,7 +73,7 @@ impl Contract for LstContract {
                 }
 
                 // Update the stake by subtracting the amount
-                let new_amount = current_amount.try_sub(amount).expect("Failed to subtract stake balance");
+                let new_amount = current_amount.sub(amount);
                 self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
             }
         }

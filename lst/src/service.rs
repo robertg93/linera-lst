@@ -11,7 +11,7 @@ use async_graphql::{EmptySubscription, Object, Request, Response, Schema};
 use linera_sdk::{graphql::GraphQLMutationRoot, linera_base_types::WithServiceAbi, views::View, Service, ServiceRuntime};
 use lst::{Operation, Parameters};
 
-use self::state::LstState;
+use crate::state::LstState;
 
 // ANCHOR: service_struct
 linera_sdk::service!(LstService);
