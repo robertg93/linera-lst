@@ -10,7 +10,7 @@ use linera_sdk::{
     linera_base_types::{AccountOwner, Amount, ApplicationId, ApplicationPermissions},
     test::{ActiveChain, QueryOutcome, TestValidator},
 };
-use lst_test::{MatchingEngineAbi, Operation, Parameters};
+use lst_test::{LstTestAbi, Operation, Parameters};
 
 // pub async fn get_orders(application_id: ApplicationId<MatchingEngineAbi>, chain: &ActiveChain, account_owner: AccountOwner) -> Option<Vec<OrderId>> {
 //     let query = format!("query {{ accountInfo {{ entry(key: {}) {{ value {{ orders }} }} }} }}", account_owner.to_value());
@@ -53,7 +53,7 @@ use lst_test::{MatchingEngineAbi, Operation, Parameters};
 ///   * User_b: It has 8 - 3 = 5 token B and the newly acquired 6 token A
 #[tokio::test]
 async fn single_transaction() {
-    let (validator, module_id) = TestValidator::with_current_module::<MatchingEngineAbi, Parameters, ()>().await;
+    let (validator, module_id) = TestValidator::with_current_module::<LstTestAbi, Parameters, ()>().await;
 
     let mut user_chain_a = validator.new_chain().await;
     let owner_a = AccountOwner::from(user_chain_a.public_key());

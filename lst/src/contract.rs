@@ -6,22 +6,18 @@
 mod state;
 
 use linera_sdk::{
-    linera_base_types::{Amount, ApplicationId, WithContractAbi},
+    linera_base_types::{Amount, WithContractAbi},
     views::{RootView, View},
     Contract, ContractRuntime,
 };
-use lst::{LstAbi, Operation, Parameters};
-
-use self::state::LstState;
-
-// ANCHOR: contract_struct
-linera_sdk::contract!(LstContract);
+use lst::{LstAbi, Message, Operation, Parameters};
+use state::LstState;
 
 pub struct LstContract {
     state: LstState,
     runtime: ContractRuntime<Self>,
 }
-// ANCHOR_END: contract_struct
+linera_sdk::contract!(LstContract);
 
 // ANCHOR: declare_abi
 impl WithContractAbi for LstContract {
@@ -30,28 +26,22 @@ impl WithContractAbi for LstContract {
 // ANCHOR_END: declare_abi
 
 impl Contract for LstContract {
-    type Message = ();
+    type Message = Message;
     type InstantiationArgument = ();
     type Parameters = Parameters;
     type EventValue = ();
 
-    // ANCHOR: load
     async fn load(runtime: ContractRuntime<Self>) -> Self {
         let state = LstState::load(runtime.root_view_storage_context()).await.expect("Failed to load state");
         LstContract { state, runtime }
     }
-    // ANCHOR_END: load
 
-    // ANCHOR: instantiate
     async fn instantiate(&mut self, _: ()) {
         // Validate that the application parameters were configured correctly.
         self.runtime.application_parameters();
     }
 
-    // ANCHOR_END: instantiate
-
-    // ANCHOR: execute_operation
-    async fn execute_operation(&mut self, operation: Self::Operation) -> Self::Response {
+    async fn execute_operation(&mut self, operation: Operation) -> Self::Response {
         match operation {
             Operation::Stake { owner, amount } => {
                 // Check if the user already has a stake
@@ -88,8 +78,8 @@ impl Contract for LstContract {
     }
     // ANCHOR_END: execute_operation
 
-    async fn execute_message(&mut self, _message: ()) {
-        panic!("Lst application doesn't support any cross-chain messages");
+    async fn execute_message(&mut self, _message: Message) {
+        // panic!("Lst application doesn't support any cross-chain messages");
     }
 
     // ANCHOR: store

@@ -57,7 +57,7 @@ use serde::{Deserialize, Serialize};
 /// The matching engine containing the information.
 #[derive(RootView, SimpleObject)]
 #[view(context = "ViewStorageContext")]
-pub struct MatchingEngineState {
+pub struct LstTestState {
     // ///The next_order_number contains the order_id so that
     // ///the order_id gets created from 0, to infinity.
     // pub next_order_number: RegisterView<u64>,

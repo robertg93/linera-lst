@@ -11,14 +11,14 @@ use linera_sdk::{
 };
 use serde::{Deserialize, Serialize};
 
-pub struct MatchingEngineAbi;
+pub struct LstTestAbi;
 
-impl ContractAbi for MatchingEngineAbi {
+impl ContractAbi for LstTestAbi {
     type Operation = Operation;
     type Response = ();
 }
 
-impl ServiceAbi for MatchingEngineAbi {
+impl ServiceAbi for LstTestAbi {
     type Query = Request;
     type QueryResponse = Response;
 }

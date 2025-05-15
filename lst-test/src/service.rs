@@ -11,25 +11,25 @@ use async_graphql::{EmptySubscription, Request, Response, Schema};
 use linera_sdk::{graphql::GraphQLMutationRoot, linera_base_types::WithServiceAbi, views::View, Service, ServiceRuntime};
 use lst_test::{Operation, Parameters};
 
-use crate::state::MatchingEngineState;
+use crate::state::LstTestState;
 
-pub struct MatchingEngineService {
-    state: Arc<MatchingEngineState>,
+pub struct LstTestService {
+    state: Arc<LstTestState>,
     runtime: Arc<ServiceRuntime<Self>>,
 }
 
-linera_sdk::service!(MatchingEngineService);
+linera_sdk::service!(LstTestService);
 
-impl WithServiceAbi for MatchingEngineService {
-    type Abi = lst_test::MatchingEngineAbi;
+impl WithServiceAbi for LstTestService {
+    type Abi = lst_test::LstTestAbi;
 }
 
-impl Service for MatchingEngineService {
+impl Service for LstTestService {
     type Parameters = Parameters;
 
     async fn new(runtime: ServiceRuntime<Self>) -> Self {
-        let state = MatchingEngineState::load(runtime.root_view_storage_context()).await.expect("Failed to load state");
-        MatchingEngineService {
+        let state = LstTestState::load(runtime.root_view_storage_context()).await.expect("Failed to load state");
+        LstTestService {
             state: Arc::new(state),
             runtime: Arc::new(runtime),
         }
