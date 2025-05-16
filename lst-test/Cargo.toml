@@ -1,0 +1,25 @@
+[package]
+name = "lst-test"
+version = "0.1.0"
+authors = ["Linera <contact@linera.io>"]
+edition = "2021"
+
+[dependencies]
+async-graphql.workspace = true
+fungible.workspace = true
+linera-sdk.workspace = true
+serde.workspace = true
+bcs.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+fungible = { workspace = true, features = ["test"] }
+linera-sdk = { workspace = true, features = ["test", "wasmer"] }
+tokio = { workspace = true, features = ["rt", "sync"] }
+
+[[bin]]
+name = "lst_test_contract"
+path = "src/contract.rs"
+
+[[bin]]
+name = "lst_test_service"
+path = "src/service.rs"

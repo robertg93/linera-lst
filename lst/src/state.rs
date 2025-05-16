@@ -1,15 +1,14 @@
 // Copyright (c) Zefchain Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
+use async_graphql::SimpleObject;
 
 use linera_sdk::{
     linera_base_types::{AccountOwner, Amount},
-    views::{linera_views, MapView, RegisterView, RootView, ViewStorageContext},
+    views::{linera_views, MapView, RootView, ViewStorageContext},
 };
 
-/// The application state.
-#[derive(RootView, async_graphql::SimpleObject)]
+#[derive(RootView, SimpleObject)]
 #[view(context = "ViewStorageContext")]
 pub struct LstState {
     pub stake_balances: MapView<AccountOwner, Amount>,

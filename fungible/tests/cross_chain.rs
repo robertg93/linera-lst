@@ -5,7 +5,9 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use fungible::{Account, FungibleTokenAbi, InitialState, InitialStateBuilder, Operation, Parameters};
+use fungible::{
+    Account, FungibleTokenAbi, InitialState, InitialStateBuilder, Operation, Parameters,
+};
 use linera_sdk::{
     linera_base_types::{AccountOwner, Amount},
     test::{Medium, MessageAction, TestValidator},
@@ -21,13 +23,18 @@ async fn test_cross_chain_transfer() {
     let initial_amount = Amount::from_tokens(20);
     let transfer_amount = Amount::from_tokens(15);
 
-    let (validator, module_id) = TestValidator::with_current_module::<fungible::FungibleTokenAbi, Parameters, InitialState>().await;
+    let (validator, module_id) =
+        TestValidator::with_current_module::<fungible::FungibleTokenAbi, Parameters, InitialState>(
+        )
+        .await;
     let mut sender_chain = validator.new_chain().await;
     let sender_account = AccountOwner::from(sender_chain.public_key());
 
     let initial_state = InitialStateBuilder::default().with_account(sender_account, initial_amount);
     let params = Parameters::new("FUN");
-    let application_id = sender_chain.create_application(module_id, params, initial_state.build(), vec![]).await;
+    let application_id = sender_chain
+        .create_application(module_id, params, initial_state.build(), vec![])
+        .await;
 
     let receiver_chain = validator.new_chain().await;
     let receiver_account = AccountOwner::from(receiver_chain.public_key());
@@ -55,7 +62,10 @@ async fn test_cross_chain_transfer() {
 
     receiver_chain.handle_received_messages().await;
 
-    assert_eq!(fungible::query_account(application_id, &receiver_chain, receiver_account).await, Some(transfer_amount),);
+    assert_eq!(
+        fungible::query_account(application_id, &receiver_chain, receiver_account).await,
+        Some(transfer_amount),
+    );
 }
 
 /// Test bouncing some tokens back to the sender.
@@ -69,13 +79,16 @@ async fn test_bouncing_tokens() {
     let initial_amount = Amount::from_tokens(19);
     let transfer_amount = Amount::from_tokens(7);
 
-    let (validator, module_id) = TestValidator::with_current_module::<FungibleTokenAbi, Parameters, InitialState>().await;
+    let (validator, module_id) =
+        TestValidator::with_current_module::<FungibleTokenAbi, Parameters, InitialState>().await;
     let mut sender_chain = validator.new_chain().await;
     let sender_account = AccountOwner::from(sender_chain.public_key());
 
     let initial_state = InitialStateBuilder::default().with_account(sender_account, initial_amount);
     let params = Parameters::new("RET");
-    let application_id = sender_chain.create_application(module_id, params, initial_state.build(), vec![]).await;
+    let application_id = sender_chain
+        .create_application(module_id, params, initial_state.build(), vec![])
+        .await;
 
     let receiver_chain = validator.new_chain().await;
     let receiver_account = AccountOwner::from(receiver_chain.public_key());
@@ -105,13 +118,23 @@ async fn test_bouncing_tokens() {
 
     receiver_chain
         .add_block(move |block| {
-            block.with_messages_from_by_medium(&certificate, &Medium::Direct, MessageAction::Reject);
+            block.with_messages_from_by_medium(
+                &certificate,
+                &Medium::Direct,
+                MessageAction::Reject,
+            );
         })
         .await;
 
-    assert_eq!(fungible::query_account(application_id, &receiver_chain, receiver_account).await, None,);
+    assert_eq!(
+        fungible::query_account(application_id, &receiver_chain, receiver_account).await,
+        None,
+    );
 
     sender_chain.handle_received_messages().await;
 
-    assert_eq!(fungible::query_account(application_id, &sender_chain, sender_account).await, Some(initial_amount),);
+    assert_eq!(
+        fungible::query_account(application_id, &sender_chain, sender_account).await,
+        Some(initial_amount),
+    );
 }
