@@ -59,8 +59,8 @@ async fn single_transaction() {
     let owner_a = AccountOwner::from(user_chain_a.public_key());
     let mut user_chain_b = validator.new_chain().await;
     let owner_b = AccountOwner::from(user_chain_b.public_key());
-    let mut matching_chain = validator.new_chain().await;
-    let admin_account = AccountOwner::from(matching_chain.public_key());
+    let mut stake_chain = validator.new_chain().await;
+    let admin_account = AccountOwner::from(stake_chain.public_key());
 
     let fungible_module_id_a = user_chain_a
         .publish_bytecode_files_in::<fungible::FungibleTokenAbi, fungible::Parameters, fungible::InitialState>("../fungible")
@@ -89,7 +89,19 @@ async fn single_transaction() {
     // Creating the matching engine chain
     let tokens = [token_id_a, token_id_b];
     let matching_parameter = Parameters { tokens };
-    let matching_id = matching_chain
+    let matching_id = stake_chain
         .create_application(module_id, matching_parameter, (), vec![token_id_a.forget_abi(), token_id_b.forget_abi()])
+        .await;
+
+    let stake = user_chain_a
+        .add_block(|block| {
+            block.with_operation(
+                matching_id,
+                Operation::Stake {
+                    owner: admin_account,
+                    amount: Amount::from_tokens(100),
+                },
+            );
+        })
         .await;
 }

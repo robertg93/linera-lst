@@ -4,12 +4,12 @@
 use async_graphql::SimpleObject;
 
 use linera_sdk::{
-    linera_base_types::AccountOwner,
+    linera_base_types::{AccountOwner, Amount},
     views::{linera_views, MapView, RootView, ViewStorageContext},
 };
 
 #[derive(RootView, SimpleObject)]
 #[view(context = "ViewStorageContext")]
 pub struct LstState {
-    pub stake_balances: MapView<AccountOwner, u64>,
+    pub stake_balances: MapView<AccountOwner, Amount>,
 }

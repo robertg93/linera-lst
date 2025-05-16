@@ -4,9 +4,9 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 
 mod state;
-
+use fungible::{Account, FungibleTokenAbi};
 use linera_sdk::{
-    linera_base_types::WithContractAbi,
+    linera_base_types::{AccountOwner, Amount, ApplicationId, WithContractAbi},
     views::{RootView, View},
     Contract, ContractRuntime,
 };
@@ -42,35 +42,41 @@ impl Contract for LstContract {
     async fn execute_operation(&mut self, operation: Operation) -> Self::Response {
         match operation {
             Operation::Stake { owner, amount } => {
-                // // Check if the user already has a stake
-                // let current_amount = match self.state.stake_balances.get(&owner).await {
-                //     Ok(Some(current)) => current,
-                //     Ok(None) => 0,
-                //     Err(e) => panic!("Failed to get stake balance: {}", e),
-                // };
+                // Check if the user already has a stake
+                let current_amount = match self.state.stake_balances.get(&owner).await {
+                    Ok(Some(current)) => current,
+                    Ok(None) => Amount::ZERO,
+                    Err(e) => panic!("Failed to get stake balance: {}", e),
+                };
 
-                // // Update the stake by adding the new amount to the existing one
-                // let new_amount = current_amount.add(amount);
-                // self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
+                // Update the stake by adding the new amount to the existing one
+                let new_amount = current_amount.try_add(amount).expect("Failed to add stake balance");
+                self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
 
-                // self.runtime.application_parameters (authenticated, application, call)
+                // Transfer the native token to the contract
+                let native_token_id = self.native_token_app_id();
+                self.receive_from_account(owner, amount, native_token_id);
+
+                // Transfer the staked token to the user
+                let staked_token_id = self.staked_token_app_id();
+                self.send_to(amount, owner, staked_token_id);
             }
             Operation::Unstake { owner, amount } => {
-                // // Check if the user has a stake
-                // let current_amount = match self.state.stake_balances.get(&owner).await {
-                //     Ok(Some(current)) => current,
-                //     Ok(None) => panic!("No stake found for user"),
-                //     Err(e) => panic!("Failed to get stake balance: {}", e),
-                // };
+                // Check if the user has a stake
+                let current_amount = match self.state.stake_balances.get(&owner).await {
+                    Ok(Some(current)) => current,
+                    Ok(None) => panic!("No stake found for user"),
+                    Err(e) => panic!("Failed to get stake balance: {}", e),
+                };
 
-                // // Ensure the user has enough stake to unstake
-                // if current_amount < amount {
-                //     panic!("Insufficient stake balance");
-                // }
+                // Ensure the user has enough stake to unstake
+                if current_amount < amount {
+                    panic!("Insufficient stake balance");
+                }
 
-                // // Update the stake by subtracting the amount
-                // let new_amount = current_amount.sub(amount);
-                // self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
+                // Update the stake by subtracting the amount
+                let new_amount = current_amount.try_sub(amount).expect("Failed to subtract stake balance");
+                self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
             }
         }
     }
@@ -87,14 +93,62 @@ impl Contract for LstContract {
     // ANCHOR_END: store
 }
 
-// impl LstContract {
-//     fn native_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
-//         self.runtime.application_parameters().0
-//     }
-//     fn staked_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
-//         self.runtime.application_parameters().1
-//     }
-// }
+impl LstContract {
+    fn native_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
+        self.runtime.application_parameters().tokens[0]
+    }
+    fn staked_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
+        self.runtime.application_parameters().tokens[1]
+    }
+    /// Transfers `amount` tokens from the funds in custody to the `owner`'s account.
+    fn send_to(&mut self, amount: Amount, owner: AccountOwner, fungible_id: ApplicationId<FungibleTokenAbi>) {
+        let target_account = Account {
+            chain_id: self.runtime.chain_id(),
+            owner,
+        };
+        let transfer = fungible::Operation::Transfer {
+            owner: self.runtime.application_id().into(),
+            amount,
+            target_account,
+        };
+
+        self.runtime.call_application(true, fungible_id, &transfer);
+    }
+
+    /// Calls into the Fungible Token application to receive tokens from the given account.
+    fn receive_from_account(&mut self, owner: AccountOwner, amount: Amount, fungible_id: ApplicationId<FungibleTokenAbi>) {
+        let target_account = Account {
+            chain_id: self.runtime.chain_id(),
+            owner: self.runtime.application_id().into(),
+        };
+        let transfer = fungible::Operation::Transfer { owner, amount, target_account };
+        self.runtime.call_application(true, fungible_id, &transfer);
+    }
+
+    // /// Calls into the Fungible Token application to receive tokens from the given account.
+    // fn receive_from_account(&mut self, owner: &AccountOwner, amount: &Amount, nature: &OrderNature, price: &Price) {
+    //     let destination = Account {
+    //         chain_id: self.runtime.chain_id(),
+    //         owner: self.runtime.application_id().into(),
+    //     };
+    //     let (amount, token_idx) = Self::get_amount_idx(nature, price, amount);
+    //     self.transfer(*owner, amount, destination, token_idx)
+    // }
+
+    // /// Transfers `amount` tokens from the funds in custody to the `destination`.
+    // fn send_to(&mut self, transfer: Transfer) {
+    //     let destination = transfer.account;
+    //     let owner_app = self.runtime.application_id().into();
+    //     self.transfer(owner_app, transfer.amount, destination, transfer.token_idx);
+    // }
+
+    // /// Transfers tokens from the owner to the destination
+    // fn transfer(&mut self, owner: AccountOwner, amount: Amount, target_account: Account, token_idx: u32) {
+    //     let transfer = fungible::Operation::Transfer { owner, amount, target_account };
+    //     let token = self.fungible_id(token_idx);
+    //     self.runtime.call_application(true, token, &transfer);
+    // }
+}
 
 // #[cfg(test)]
 // mod tests {

@@ -7,7 +7,7 @@ use async_graphql::{scalar, Request, Response};
 use fungible::FungibleTokenAbi;
 use linera_sdk::{
     graphql::GraphQLMutationRoot,
-    linera_base_types::{AccountOwner, ApplicationId, ContractAbi, ServiceAbi},
+    linera_base_types::{AccountOwner, Amount, ApplicationId, ContractAbi, ServiceAbi},
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,9 +34,9 @@ scalar!(Parameters);
 #[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
 pub enum Operation {
     /// Pledge some tokens to the campaign (from an account on the current chain to the campaign chain).
-    Stake { owner: AccountOwner, amount: u64 },
+    Stake { owner: AccountOwner, amount: Amount },
     /// Collect the pledges after the campaign has reached its target (campaign chain only).
-    Unstake { owner: AccountOwner, amount: u64 },
+    Unstake { owner: AccountOwner, amount: Amount },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
