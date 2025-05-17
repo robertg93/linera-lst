@@ -59,7 +59,7 @@ impl Contract for LstContract {
 
                 // Transfer the staked token to the user
                 let staked_token_id = self.staked_token_app_id();
-                self.send_to(amount, owner, staked_token_id);
+                // self.send_to(amount, owner, staked_token_id);
             }
             Operation::Unstake { owner, amount } => {
                 // Check if the user has a stake
@@ -77,6 +77,9 @@ impl Contract for LstContract {
                 // Update the stake by subtracting the amount
                 let new_amount = current_amount.try_sub(amount).expect("Failed to subtract stake balance");
                 self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
+            }
+            Operation::Test => {
+                println!("Test operation");
             }
         }
     }
@@ -150,51 +153,51 @@ impl LstContract {
     // }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use std::str::FromStr;
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
 
-//     use futures::FutureExt as _;
-//     use linera_sdk::{
-//         abis::fungible::{self, FungibleTokenAbi, Parameters},
-//         linera_base_types::{AccountOwner, AccountSecretKey, Amount, ApplicationId, Secp256k1SecretKey},
-//         util::BlockingWait,
-//         views::View,
-//         Contract, ContractRuntime,
-//     };
-//     use lst::Operation;
+    use futures::FutureExt as _;
+    use linera_sdk::{
+        abis::fungible::{self, FungibleTokenAbi, Parameters},
+        linera_base_types::{AccountOwner, AccountSecretKey, Amount, ApplicationId, ChainId, Secp256k1SecretKey},
+        util::BlockingWait,
+        views::View,
+        Contract, ContractRuntime,
+    };
+    use lst::{LstAbi, Operation};
 
-//     use super::{LstContract, LstState};
+    use super::{LstContract, LstState};
 
-//     // ANCHOR: counter_test
-//     #[test]
-//     fn operation() {
-//         //     let native_params = Parameters::new("NAT");
-//         //     let staked_params = Parameters::new("LST");
-//         let application_id_native = ApplicationId::default().with_abi::<FungibleTokenAbi>();
-//         let application_id_staked = ApplicationId::default().with_abi::<FungibleTokenAbi>();
+    #[test]
+    fn operation() {
+        //     let native_params = Parameters::new("NAT");
+        //     let staked_params = Parameters::new("LST");
+        let application_id_native = ApplicationId::default().with_abi::<FungibleTokenAbi>();
+        let application_id_staked = ApplicationId::default().with_abi::<FungibleTokenAbi>();
+        let lst_id_staked = ApplicationId::default().with_abi::<LstAbi>();
+        let params = lst::Parameters {
+            tokens: [application_id_native, application_id_staked],
+        };
 
-//         let runtime = ContractRuntime::new().with_application_parameters((application_id_native, application_id_staked));
-//         let state = LstState::load(runtime.root_view_storage_context()).blocking_wait().expect("Failed to read from mock key value store");
-//         let mut counter = LstContract { state, runtime };
+        let mut runtime = ContractRuntime::new().with_application_parameters(params);
+        runtime.set_chain_id(ChainId::default());
+        runtime.set_application_id(lst_id_staked);
+        let state = LstState::load(runtime.root_view_storage_context()).blocking_wait().expect("Failed to read from mock key value store");
+        let mut lst: LstContract = LstContract { state, runtime };
 
-//         let initial_value = ();
-//         counter.instantiate(initial_value).now_or_never().expect("Initialization of counter state should not await anything");
+        let user_keypair = AccountSecretKey::Secp256k1(Secp256k1SecretKey::generate());
+        let user_pubkey = AccountOwner::from(user_keypair.public());
+        let response = lst
+            .execute_operation(Operation::Stake {
+                owner: user_pubkey,
+                amount: Amount::ONE,
+            })
+            .blocking_wait();
 
-//         //     let user_keypair = AccountSecretKey::Secp256k1(Secp256k1SecretKey::generate());
-//         //     let user_pubkey = AccountOwner::from(user_keypair.public());
-//         //     let response = counter
-//         //         .execute_operation(Operation::Stake {
-//         //             owner: user_pubkey,
-//         //             amount: Amount::ONE,
-//         //         })
-//         //         .now_or_never()
-//         //         .expect("Execution of counter operation should not await anything");
-
-//         //     assert_eq!(response, ());
-//     }
-// ANCHOR_END: counter_test
-
+        //     assert_eq!(response, ());
+    }
+}
 // #[test]
 // #[should_panic(expected = "Lst application doesn't support any cross-chain messages")]
 // fn message() {

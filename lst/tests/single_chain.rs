@@ -6,6 +6,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use async_graphql::InputType;
+use fungible::Account;
 use linera_sdk::{
     linera_base_types::{AccountOwner, Amount, ApplicationId, ApplicationPermissions},
     test::{ActiveChain, QueryOutcome, TestValidator},
@@ -53,29 +54,31 @@ use lst::{LstAbi, Operation, Parameters};
 ///   * User_b: It has 8 - 3 = 5 token B and the newly acquired 6 token A
 #[tokio::test]
 async fn single_transaction() {
+    println!("here 0");
     let (validator, module_id) = TestValidator::with_current_module::<LstAbi, Parameters, ()>().await;
-
+    println!("here 0.1");
     let mut user_chain_a = validator.new_chain().await;
     let owner_a = AccountOwner::from(user_chain_a.public_key());
     let mut user_chain_b = validator.new_chain().await;
     let owner_b = AccountOwner::from(user_chain_b.public_key());
     let mut stake_chain = validator.new_chain().await;
     let admin_account = AccountOwner::from(stake_chain.public_key());
-
+    println!("here 1");
+    // publish fungible module
     let fungible_module_id_a = user_chain_a
         .publish_bytecode_files_in::<fungible::FungibleTokenAbi, fungible::Parameters, fungible::InitialState>("../fungible")
         .await;
     let fungible_module_id_b = user_chain_b
         .publish_bytecode_files_in::<fungible::FungibleTokenAbi, fungible::Parameters, fungible::InitialState>("../fungible")
         .await;
-
+    println!("here 2");
     let initial_state_a = fungible::InitialStateBuilder::default().with_account(owner_a, Amount::from_tokens(10));
     let params_a = fungible::Parameters::new("A");
     let token_id_a = user_chain_a.create_application(fungible_module_id_a, params_a, initial_state_a.build(), vec![]).await;
     let initial_state_b = fungible::InitialStateBuilder::default().with_account(owner_b, Amount::from_tokens(9));
     let params_b = fungible::Parameters::new("B");
     let token_id_b = user_chain_b.create_application(fungible_module_id_b, params_b, initial_state_b.build(), vec![]).await;
-
+    println!("here 3");
     // Check the initial starting amounts for chain a and chain b
     for (owner, amount) in [(admin_account, None), (owner_a, Some(Amount::from_tokens(10))), (owner_b, None)] {
         let value = fungible::query_account(token_id_a, &user_chain_a, owner).await;
@@ -85,23 +88,47 @@ async fn single_transaction() {
         let value = fungible::query_account(token_id_b, &user_chain_b, owner).await;
         assert_eq!(value, amount);
     }
-
+    println!("here 4");
     // Creating the matching engine chain
     let tokens = [token_id_a, token_id_b];
     let matching_parameter = Parameters { tokens };
-    let matching_id = stake_chain
+    let lst_id = stake_chain
         .create_application(module_id, matching_parameter, (), vec![token_id_a.forget_abi(), token_id_b.forget_abi()])
         .await;
-
-    let stake = user_chain_a
+    println!("here 5");
+    /// send tokens to stake chain from user_chain_a
+    user_chain_a
         .add_block(|block| {
             block.with_operation(
-                matching_id,
-                Operation::Stake {
-                    owner: admin_account,
-                    amount: Amount::from_tokens(100),
+                token_id_a,
+                fungible::Operation::Transfer {
+                    owner: owner_a,
+                    amount: Amount::from_tokens(10),
+                    target_account: Account {
+                        chain_id: stake_chain.id(),
+                        owner: owner_a,
+                    },
                 },
             );
         })
         .await;
+    println!("here 6");
+    let stake = stake_chain
+        .add_block(|block| {
+            block.with_operation(lst_id, Operation::Test);
+        })
+        .await;
+    println!("here 7");
+    let stake = stake_chain
+        .add_block(|block| {
+            block.with_operation(
+                lst_id,
+                Operation::Stake {
+                    owner: owner_a,
+                    amount: Amount::from_tokens(1),
+                },
+            );
+        })
+        .await;
+    println!("here 8");
 }
