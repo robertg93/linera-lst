@@ -5,6 +5,8 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::collections::HashMap;
+
 use async_graphql::InputType;
 use fungible::Account;
 use linera_sdk::{
@@ -13,57 +15,84 @@ use linera_sdk::{
 };
 use lst::{LstAbi, Operation, Parameters};
 
-// pub async fn get_orders(application_id: ApplicationId<MatchingEngineAbi>, chain: &ActiveChain, account_owner: AccountOwner) -> Option<Vec<OrderId>> {
-//     let query = format!("query {{ accountInfo {{ entry(key: {}) {{ value {{ orders }} }} }} }}", account_owner.to_value());
-//     let QueryOutcome { response, .. } = chain.graphql_query(application_id, query).await;
-//     let orders = &response["accountInfo"]["entry"]["value"]["orders"];
-//     let values = orders.as_array()?.iter().map(|order| order.as_u64().unwrap()).collect();
-//     Some(values)
-// }
-
-/// Test creating a matching engine, pushing some orders, canceling some and
-/// seeing how the transactions went.
-///
-/// The operation is done in exactly the same way with the same amounts
-/// and quantities as the corresponding end to end test.
-///
-/// We have 3 chains:
-/// * The chain A of User_a for tokens A
-/// * The chain B of User_b for tokens B
-/// * The admin chain of the matching engine.
-///
-/// The following operations are done:
-/// * We create users and assign them their initial positions:
-///   * user_a with 10 tokens A.
-///   * user_b with 9 tokens B.
-/// * Then we create the following orders:
-///   * User_a: Offer to buy token B in exchange for token A for a price of 1 (or 2) with
-///     a quantity of 3 token B.
-///     User_a thus commits 3 * 1 + 3 * 2 = 9 token A to the matching engine chain and is
-///     left with 1 token A on chain A
-///   * User_b: Offer to sell token B in exchange for token A for a price of 2 (or 4) with
-///     a quantity of 4 token B
-///     User_b thus commits 4 + 4 = 8 token B on the matching engine chain and is left
-///     with 1 token B.
-/// * The price that is matching is 2 where a transaction can actually occur
-///   * Only 3 token B can be exchanged against 6 tokens A.
-///   * So, the order from user_b is only partially filled.
-/// * Then the orders are cancelled and the user get back their tokens.
-///   After the exchange we have
-///   * User_a: It has 9 - 6 = 3 token A and the newly acquired 3 token B.
-///   * User_b: It has 8 - 3 = 5 token B and the newly acquired 6 token A
-#[tokio::test]
-async fn single_transaction() {
-    println!("here 0");
+#[tokio::test(flavor = "multi_thread")]
+async fn single_chain() {
     let (validator, module_id) = TestValidator::with_current_module::<LstAbi, Parameters, ()>().await;
-    println!("here 0.1");
-    let mut user_chain_a = validator.new_chain().await;
-    let owner_a = AccountOwner::from(user_chain_a.public_key());
-    let mut user_chain_b = validator.new_chain().await;
-    let owner_b = AccountOwner::from(user_chain_b.public_key());
+
     let mut stake_chain = validator.new_chain().await;
     let admin_account = AccountOwner::from(stake_chain.public_key());
-    println!("here 1");
+
+    // publish fungible module
+    let fungible_module_id_a = stake_chain
+        .publish_bytecode_files_in::<fungible::FungibleTokenAbi, fungible::Parameters, fungible::InitialState>("../fungible")
+        .await;
+    let fungible_module_id_b = stake_chain
+        .publish_bytecode_files_in::<fungible::FungibleTokenAbi, fungible::Parameters, fungible::InitialState>("../fungible")
+        .await;
+
+    let initial_state_a = fungible::InitialStateBuilder::default().with_account(admin_account, Amount::from_tokens(100));
+    let params_a = fungible::Parameters::new("A");
+    let token_id_a = stake_chain.create_application(fungible_module_id_a, params_a, initial_state_a.build(), vec![]).await;
+    let initial_state_b = fungible::InitialStateBuilder::default().with_account(admin_account, Amount::from_tokens(100));
+    let params_b = fungible::Parameters::new("B");
+    let token_id_b = stake_chain.create_application(fungible_module_id_b, params_b, initial_state_b.build(), vec![]).await;
+
+    // Check the initial starting amounts for chain a and chain b
+    for (owner, amount) in [(admin_account, Some(Amount::from_tokens(100)))] {
+        let value = fungible::query_account(token_id_a, &stake_chain, owner).await;
+        assert_eq!(value, amount);
+    }
+    for (owner, amount) in [(admin_account, Some(Amount::from_tokens(100)))] {
+        let value = fungible::query_account(token_id_b, &stake_chain, owner).await;
+        assert_eq!(value, amount);
+    }
+
+    // Creating the stake chain
+    let tokens = [token_id_a];
+    let stake_parameter = Parameters { tokens };
+    let lst_id = stake_chain.create_application(module_id, stake_parameter, (), vec![token_id_a.forget_abi()]).await;
+
+    let stake_cert = stake_chain
+        .add_block(|block| {
+            block.with_operation(
+                lst_id,
+                Operation::Stake {
+                    owner: admin_account,
+                    amount: Amount::from_tokens(1),
+                },
+            );
+        })
+        .await;
+
+    stake_chain
+        .add_block(|block| {
+            block.with_messages_from(&stake_cert);
+        })
+        .await;
+    // lst_id.
+    // let QueryOutcome { response, .. } = stake_chain.graphql_query(lst_id, "query { owner }").await;
+    // let state_value = response["owner"].to_string();
+    // println!("temp: {:?}", state_value);
+    let temp = fungible::query_account(token_id_a, &stake_chain, lst_id.application_description_hash.into()).await;
+    println!("temp: {:?}", temp);
+    // let admin_balance = fungible::query_account(token_id_a, &stake_chain, module_id.contract_blob_hash.into()).await;
+    // println!("stake_chain.owner_balances: {:?}", admin_balance);
+    // assert_eq!(admin_balance, Some(Amount::from_tokens(1)));
+}
+
+#[tokio::test]
+async fn multiple_chains() {
+    let (validator, module_id) = TestValidator::with_current_module::<LstAbi, Parameters, ()>().await;
+
+    let mut user_chain_a = validator.new_chain().await;
+    let owner_a = AccountOwner::from(user_chain_a.public_key());
+
+    let mut user_chain_b = validator.new_chain().await;
+    let owner_b = AccountOwner::from(user_chain_b.public_key());
+
+    let mut stake_chain = validator.new_chain().await;
+    let admin_account = AccountOwner::from(stake_chain.public_key());
+
     // publish fungible module
     let fungible_module_id_a = user_chain_a
         .publish_bytecode_files_in::<fungible::FungibleTokenAbi, fungible::Parameters, fungible::InitialState>("../fungible")
@@ -71,55 +100,61 @@ async fn single_transaction() {
     let fungible_module_id_b = user_chain_b
         .publish_bytecode_files_in::<fungible::FungibleTokenAbi, fungible::Parameters, fungible::InitialState>("../fungible")
         .await;
-    println!("here 2");
-    let initial_state_a = fungible::InitialStateBuilder::default().with_account(owner_a, Amount::from_tokens(10));
+
+    let initial_state_a = fungible::InitialStateBuilder::default().with_account(owner_a, Amount::from_tokens(100));
     let params_a = fungible::Parameters::new("A");
     let token_id_a = user_chain_a.create_application(fungible_module_id_a, params_a, initial_state_a.build(), vec![]).await;
-    let initial_state_b = fungible::InitialStateBuilder::default().with_account(owner_b, Amount::from_tokens(9));
+    let initial_state_b = fungible::InitialStateBuilder::default().with_account(owner_b, Amount::from_tokens(100));
     let params_b = fungible::Parameters::new("B");
     let token_id_b = user_chain_b.create_application(fungible_module_id_b, params_b, initial_state_b.build(), vec![]).await;
-    println!("here 3");
+
     // Check the initial starting amounts for chain a and chain b
-    for (owner, amount) in [(admin_account, None), (owner_a, Some(Amount::from_tokens(10))), (owner_b, None)] {
+    for (owner, amount) in [(admin_account, None), (owner_a, Some(Amount::from_tokens(100))), (owner_b, None)] {
         let value = fungible::query_account(token_id_a, &user_chain_a, owner).await;
         assert_eq!(value, amount);
     }
-    for (owner, amount) in [(admin_account, None), (owner_a, None), (owner_b, Some(Amount::from_tokens(9)))] {
+    for (owner, amount) in [(admin_account, None), (owner_a, None), (owner_b, Some(Amount::from_tokens(100)))] {
         let value = fungible::query_account(token_id_b, &user_chain_b, owner).await;
         assert_eq!(value, amount);
     }
-    println!("here 4");
-    // Creating the matching engine chain
-    let tokens = [token_id_a, token_id_b];
+
+    // Creating the stake chain
+    let tokens = [token_id_a];
     let matching_parameter = Parameters { tokens };
-    let lst_id = stake_chain
-        .create_application(module_id, matching_parameter, (), vec![token_id_a.forget_abi(), token_id_b.forget_abi()])
-        .await;
-    println!("here 5");
+    let lst_id = stake_chain.create_application(module_id, matching_parameter, (), vec![token_id_a.forget_abi()]).await;
+
     /// send tokens to stake chain from user_chain_a
-    user_chain_a
-        .add_block(|block| {
-            block.with_operation(
-                token_id_a,
-                fungible::Operation::Transfer {
-                    owner: owner_a,
-                    amount: Amount::from_tokens(10),
-                    target_account: Account {
-                        chain_id: stake_chain.id(),
-                        owner: owner_a,
-                    },
-                },
-            );
-        })
-        .await;
-    println!("here 6");
-    let stake = stake_chain
-        .add_block(|block| {
-            block.with_operation(lst_id, Operation::Test);
-        })
-        .await;
-    println!("here 7");
-    let stake = stake_chain
+    // let transfer_cert = user_chain_a
+    //     .add_block(|block| {
+    //         block.with_operation(
+    //             token_id_a,
+    //             fungible::Operation::Transfer {
+    //                 owner: owner_a,
+    //                 amount: Amount::from_tokens(10),
+    //                 target_account: Account {
+    //                     chain_id: stake_chain.id(),
+    //                     owner: owner_a,
+    //                 },
+    //             },
+    //         );
+    //     })
+    //     .await;
+
+    // stake_chain
+    //     .add_block(|block| {
+    //         block.with_messages_from(&transfer_cert);
+    //     })
+    //     .await;
+
+    // let stake = stake_chain
+    //     .add_block(|block| {
+    //         block.with_operation(lst_id, Operation::Test);
+    //     })
+    //     .await;
+    let temp = fungible::query_account(token_id_a, &stake_chain, lst_id.application_description_hash.into()).await;
+    println!("temp: {:?}", temp);
+
+    let stake_cert = user_chain_a
         .add_block(|block| {
             block.with_operation(
                 lst_id,
@@ -130,5 +165,15 @@ async fn single_transaction() {
             );
         })
         .await;
-    println!("here 8");
+
+    let temp = Amount::ONE;
+
+    stake_chain
+        .add_block(|block| {
+            block.with_messages_from(&stake_cert);
+        })
+        .await;
+
+    let temp = fungible::query_account(token_id_a, &stake_chain, lst_id.application_description_hash.into()).await;
+    println!("temp: {:?}", temp);
 }

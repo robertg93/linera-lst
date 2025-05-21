@@ -5,7 +5,7 @@ use async_graphql::SimpleObject;
 
 use linera_sdk::{
     linera_base_types::{AccountOwner, Amount},
-    views::{linera_views, MapView, RootView, ViewStorageContext},
+    views::{linera_views, LogView, MapView, RegisterView, RootView, ViewStorageContext},
 };
 
 #[derive(RootView, SimpleObject)]

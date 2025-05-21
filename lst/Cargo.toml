@@ -9,7 +9,7 @@ fungible.workspace = true
 futures.workspace = true
 linera-sdk.workspace = true
 serde.workspace = true
-
+log = "0.4.27"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 fungible = { workspace = true, features = ["test"] }

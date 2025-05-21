@@ -26,7 +26,7 @@ impl ServiceAbi for LstAbi {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct Parameters {
     /// The token0 and token1 used for the matching engine
-    pub tokens: [ApplicationId<FungibleTokenAbi>; 2],
+    pub tokens: [ApplicationId<FungibleTokenAbi>; 1],
 }
 
 scalar!(Parameters);
@@ -49,5 +49,5 @@ pub enum Operation {
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Message {
     /// The order being transmitted from the chain and received by the chain of the order book.
-    Msg { order: u64 },
+    StakeLocalAccount { owner: AccountOwner, amount: Amount },
 }

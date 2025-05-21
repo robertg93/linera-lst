@@ -10,6 +10,7 @@ use linera_sdk::{
     views::{RootView, View},
     Contract, ContractRuntime,
 };
+
 use lst::{LstAbi, Message, Operation, Parameters};
 use state::LstState;
 
@@ -53,13 +54,18 @@ impl Contract for LstContract {
                 let new_amount = current_amount.try_add(amount).expect("Failed to add stake balance");
                 self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
 
-                // Transfer the native token to the contract
-                let native_token_id = self.native_token_app_id();
-                self.receive_from_account(owner, amount, native_token_id);
+                if self.runtime.chain_id() == self.runtime.application_creator_chain_id() {
+                    self.stake_from_local_account(owner, amount).await;
+                } else {
+                    self.stake_from_remote_account(owner, amount);
+                }
+                // // Transfer the native token to the contract
+                // let native_token_id = self.native_token_app_id();
+                // self.receive_from_account(owner, amount, native_token_id);
 
-                // Transfer the staked token to the user
-                let staked_token_id = self.staked_token_app_id();
-                // self.send_to(amount, owner, staked_token_id);
+                // // Transfer the staked token to the user
+                // let staked_token_id = self.staked_token_app_id();
+                // // self.send_to(amount, owner, staked_token_id);
             }
             Operation::Unstake { owner, amount } => {
                 // Check if the user has a stake
@@ -85,8 +91,18 @@ impl Contract for LstContract {
     }
     // ANCHOR_END: execute_operation
 
-    async fn execute_message(&mut self, _message: Message) {
-        // panic!("Lst application doesn't support any cross-chain messages");
+    async fn execute_message(&mut self, message: Message) {
+        match message {
+            Message::StakeLocalAccount { owner, amount } => {
+                assert_eq!(
+                    self.runtime.chain_id(),
+                    self.runtime.application_creator_chain_id(),
+                    "Action can only be executed on the chain that created the crowd-funding \
+                    campaign"
+                );
+                self.stake_from_local_account(owner, amount).await;
+            }
+        }
     }
 
     // ANCHOR: store
@@ -100,8 +116,30 @@ impl LstContract {
     fn native_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
         self.runtime.application_parameters().tokens[0]
     }
-    fn staked_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
-        self.runtime.application_parameters().tokens[1]
+    // fn staked_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
+    //     self.runtime.application_parameters().tokens[1]
+    // }
+    /// Adds a pledge from a local account to the remote campaign chain.
+    fn stake_from_remote_account(&mut self, owner: AccountOwner, amount: Amount) {
+        assert!(amount > Amount::ZERO, "Stake is empty");
+        // The stake chain.
+        let chain_id = self.runtime.application_creator_chain_id();
+        // First, move the funds to the campaign chain (under the same owner).
+        // TODO(#589): Simplify this when the messaging system guarantees atomic delivery
+        // of all messages created in the same operation/message.
+        let target_account = Account { chain_id, owner };
+        let call = fungible::Operation::Transfer { owner, amount, target_account };
+        let fungible_id = self.native_token_app_id();
+        self.runtime.call_application(/* authenticated by owner */ true, fungible_id, &call);
+        // Second, schedule the attribution of the funds to the (remote) campaign.
+        self.runtime.prepare_message(Message::StakeLocalAccount { owner, amount }).with_authentication().send_to(chain_id);
+    }
+
+    /// Adds a pledge from a local account to the campaign chain.
+    async fn stake_from_local_account(&mut self, owner: AccountOwner, amount: Amount) {
+        assert!(amount > Amount::ZERO, "Pledge is empty");
+        let fungible_id = self.native_token_app_id();
+        self.receive_from_account(owner, amount, fungible_id);
     }
     /// Transfers `amount` tokens from the funds in custody to the `owner`'s account.
     fn send_to(&mut self, amount: Amount, owner: AccountOwner, fungible_id: ApplicationId<FungibleTokenAbi>) {
@@ -120,12 +158,14 @@ impl LstContract {
 
     /// Calls into the Fungible Token application to receive tokens from the given account.
     fn receive_from_account(&mut self, owner: AccountOwner, amount: Amount, fungible_id: ApplicationId<FungibleTokenAbi>) {
+        let app_owner = self.runtime.application_id().into();
+
         let target_account = Account {
             chain_id: self.runtime.chain_id(),
-            owner: self.runtime.application_id().into(),
+            owner: app_owner,
         };
         let transfer = fungible::Operation::Transfer { owner, amount, target_account };
-        self.runtime.call_application(true, fungible_id, &transfer);
+        self.runtime.call_application(false, fungible_id, &transfer);
     }
 
     // /// Calls into the Fungible Token application to receive tokens from the given account.
@@ -176,9 +216,7 @@ mod tests {
         let application_id_native = ApplicationId::default().with_abi::<FungibleTokenAbi>();
         let application_id_staked = ApplicationId::default().with_abi::<FungibleTokenAbi>();
         let lst_id_staked = ApplicationId::default().with_abi::<LstAbi>();
-        let params = lst::Parameters {
-            tokens: [application_id_native, application_id_staked],
-        };
+        let params = lst::Parameters { tokens: [application_id_native] };
 
         let mut runtime = ContractRuntime::new().with_application_parameters(params);
         runtime.set_chain_id(ChainId::default());
