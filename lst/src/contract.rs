@@ -4,9 +4,9 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 
 mod state;
-use fungible::{Account, FungibleTokenAbi};
+use fungible::{Account as FungibleAccount, FungibleTokenAbi};
 use linera_sdk::{
-    linera_base_types::{AccountOwner, Amount, ApplicationId, WithContractAbi},
+    linera_base_types::{Account, AccountOwner, Amount, ApplicationId, WithContractAbi},
     views::{RootView, View},
     Contract, ContractRuntime,
 };
@@ -42,6 +42,10 @@ impl Contract for LstContract {
 
     async fn execute_operation(&mut self, operation: Operation) -> Self::Response {
         match operation {
+            Operation::StakeNative { owner, amount } => {
+                let chain_id = self.runtime.chain_id();
+                self.runtime.transfer(owner, Account { chain_id, owner }, amount);
+            }
             Operation::Stake { owner, amount } => {
                 // Check if the user already has a stake
                 let current_amount = match self.state.stake_balances.get(&owner).await {
@@ -83,6 +87,9 @@ impl Contract for LstContract {
                 // Update the stake by subtracting the amount
                 let new_amount = current_amount.try_sub(amount).expect("Failed to subtract stake balance");
                 self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
+            }
+            Operation::Swap { owner, amount } => {
+                println!("Swap operation");
             }
             Operation::Test => {
                 println!("Test operation");
@@ -127,7 +134,7 @@ impl LstContract {
         // First, move the funds to the campaign chain (under the same owner).
         // TODO(#589): Simplify this when the messaging system guarantees atomic delivery
         // of all messages created in the same operation/message.
-        let target_account = Account { chain_id, owner };
+        let target_account = FungibleAccount { chain_id, owner };
         let call = fungible::Operation::Transfer { owner, amount, target_account };
         let fungible_id = self.native_token_app_id();
         self.runtime.call_application(/* authenticated by owner */ true, fungible_id, &call);
@@ -143,7 +150,7 @@ impl LstContract {
     }
     /// Transfers `amount` tokens from the funds in custody to the `owner`'s account.
     fn send_to(&mut self, amount: Amount, owner: AccountOwner, fungible_id: ApplicationId<FungibleTokenAbi>) {
-        let target_account = Account {
+        let target_account = FungibleAccount {
             chain_id: self.runtime.chain_id(),
             owner,
         };
@@ -160,7 +167,7 @@ impl LstContract {
     fn receive_from_account(&mut self, owner: AccountOwner, amount: Amount, fungible_id: ApplicationId<FungibleTokenAbi>) {
         let app_owner = self.runtime.application_id().into();
 
-        let target_account = Account {
+        let target_account = FungibleAccount {
             chain_id: self.runtime.chain_id(),
             owner: app_owner,
         };

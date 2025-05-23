@@ -33,13 +33,20 @@ scalar!(Parameters);
 
 #[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
 pub enum Operation {
-    /// Pledge some tokens to the campaign (from an account on the current chain to the campaign chain).
+    StakeNative {
+        owner: AccountOwner,
+        amount: Amount,
+    },
     Stake {
         owner: AccountOwner,
         amount: Amount,
     },
     /// Collect the pledges after the campaign has reached its target (campaign chain only).
     Unstake {
+        owner: AccountOwner,
+        amount: Amount,
+    },
+    Swap {
         owner: AccountOwner,
         amount: Amount,
     },
