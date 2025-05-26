@@ -15,6 +15,7 @@ log = "0.4.27"
 fungible = { workspace = true, features = ["test"] }
 linera-sdk = { workspace = true, features = ["test", "wasmer"] }
 tokio = { workspace = true, features = ["rt", "sync"] }
+test-log.workspace = true
 
 [[bin]]
 name = "lst_contract"
