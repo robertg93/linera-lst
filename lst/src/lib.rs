@@ -33,7 +33,10 @@ scalar!(Parameters);
 
 #[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
 pub enum Operation {
-    StakeNative {
+    NewLst {
+        token_id: ApplicationId,
+    },
+    DepositNative {
         owner: AccountOwner,
         amount: Amount,
     },

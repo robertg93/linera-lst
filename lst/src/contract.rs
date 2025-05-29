@@ -11,6 +11,7 @@ use linera_sdk::{
     Contract, ContractRuntime,
 };
 
+use log::warn;
 use lst::{LstAbi, Message, Operation, Parameters};
 use state::LstState;
 
@@ -42,12 +43,19 @@ impl Contract for LstContract {
 
     async fn execute_operation(&mut self, operation: Operation) -> Self::Response {
         match operation {
-            Operation::StakeNative { owner, amount } => {
+            Operation::NewLst { token_id } => {
+                self.state.approved_lst_set.insert(&token_id).expect("Failed to insert token id");
+            }
+            Operation::DepositNative { owner, amount } => {
                 let chain_id = self.runtime.chain_id();
-                self.runtime.transfer(owner, Account { chain_id, owner }, amount);
+                // let chian_balance = self.
+                let app_owner: AccountOwner = self.runtime.application_id().into();
+
+                self.runtime.transfer(owner, Account { chain_id, owner: app_owner }, amount);
             }
             Operation::Stake { owner, amount } => {
                 // Check if the user already has a stake
+                warn!("#####################");
                 let current_amount = match self.state.stake_balances.get(&owner).await {
                     Ok(Some(current)) => current,
                     Ok(None) => Amount::ZERO,
@@ -154,6 +162,7 @@ impl LstContract {
             chain_id: self.runtime.chain_id(),
             owner,
         };
+
         let transfer = fungible::Operation::Transfer {
             owner: self.runtime.application_id().into(),
             amount,
