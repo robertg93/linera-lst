@@ -26,7 +26,12 @@ impl ServiceAbi for LstAbi {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct Parameters {
     /// The token0 and token1 used for the matching engine
-    pub tokens: [ApplicationId<FungibleTokenAbi>; 1],
+    pub protocol_lst: ApplicationId<FungibleTokenAbi>,
+}
+impl Parameters {
+    pub fn get_protocol_lst(&self) -> ApplicationId<FungibleTokenAbi> {
+        self.protocol_lst
+    }
 }
 
 scalar!(Parameters);
@@ -36,9 +41,10 @@ pub enum Operation {
     NewLst {
         token_id: ApplicationId,
     },
-    DepositNative {
-        owner: AccountOwner,
+    StakeNative {
+        user: AccountOwner,
         amount: Amount,
+        lst_type_out: ApplicationId,
     },
     Stake {
         owner: AccountOwner,

@@ -38,7 +38,9 @@ impl Contract for LstContract {
 
     async fn instantiate(&mut self, _: ()) {
         // Validate that the application parameters were configured correctly.
-        self.runtime.application_parameters();
+        let protocol_lst = self.runtime.application_parameters().get_protocol_lst();
+        // self.state.protocol_lst_id.set(Some(protocol_lst.forget_abi()));
+        self.state.approved_lst_set.insert(&protocol_lst.forget_abi()).expect("Failed to insert protocol lst id");
     }
 
     async fn execute_operation(&mut self, operation: Operation) -> Self::Response {
@@ -46,12 +48,33 @@ impl Contract for LstContract {
             Operation::NewLst { token_id } => {
                 self.state.approved_lst_set.insert(&token_id).expect("Failed to insert token id");
             }
-            Operation::DepositNative { owner, amount } => {
+            Operation::StakeNative { user, amount, lst_type_out } => {
+                // check if the lst_type_out is approved
+                if !self.state.approved_lst_set.contains(&lst_type_out).await.unwrap() {
+                    panic!("Lst type out is not approved");
+                }
+                // transfer the native token to the contract
                 let chain_id = self.runtime.chain_id();
-                // let chian_balance = self.
                 let app_owner: AccountOwner = self.runtime.application_id().into();
+                self.runtime.transfer(user, Account { chain_id, owner: app_owner }, amount);
 
-                self.runtime.transfer(owner, Account { chain_id, owner: app_owner }, amount);
+                //TODO get cureent lst price, for now we assume 1:1
+                let current_price = Amount::ONE;
+                let amount_out = amount.try_mul(current_price.into()).expect("Failed to multiply amount");
+                let lst_type_out_id = lst_type_out.with_abi::<FungibleTokenAbi>();
+
+                //check chain balance
+                let balance = fungible::Operation::Balance { owner: app_owner };
+                let token = self.native_token_app_id();
+                let balance = match self.runtime.call_application(true, token, &balance) {
+                    fungible::FungibleResponse::Balance(balance) => balance,
+                    response => panic!("Unexpected response from fungible token application: {response:?}"),
+                };
+
+                warn!("balance: {:?}", balance);
+
+                // transfer the lst token to the user
+                self.send_to(amount_out, user, lst_type_out_id);
             }
             Operation::Stake { owner, amount } => {
                 // Check if the user already has a stake
@@ -129,7 +152,7 @@ impl Contract for LstContract {
 
 impl LstContract {
     fn native_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
-        self.runtime.application_parameters().tokens[0]
+        self.runtime.application_parameters().get_protocol_lst()
     }
     // fn staked_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
     //     self.runtime.application_parameters().tokens[1]
@@ -232,7 +255,7 @@ mod tests {
         let application_id_native = ApplicationId::default().with_abi::<FungibleTokenAbi>();
         let application_id_staked = ApplicationId::default().with_abi::<FungibleTokenAbi>();
         let lst_id_staked = ApplicationId::default().with_abi::<LstAbi>();
-        let params = lst::Parameters { tokens: [application_id_native] };
+        let params = lst::Parameters { protocol_lst: application_id_native };
 
         let mut runtime = ContractRuntime::new().with_application_parameters(params);
         runtime.set_chain_id(ChainId::default());
