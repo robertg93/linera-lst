@@ -162,6 +162,7 @@ async fn native_stake() {
 
     // create a new user chain
     let user_chain = validator.new_chain().await;
+    println!("user chain id: {:?}", user_chain.id());
     let user_account = AccountOwner::from(user_chain.public_key());
     let recipient_user = Recipient::Account(Account::new(user_chain.id(), user_account));
 
@@ -181,6 +182,7 @@ async fn native_stake() {
 
     let recipient_balance = user_chain.owner_balance(&user_account).await;
     assert_eq!(recipient_balance, Some(Amount::from_tokens(1000)));
+    println!("user: {:?}", user_account);
 
     // create protocol lst
     let protocol_token_module_id = stake_chain
@@ -194,32 +196,38 @@ async fn native_stake() {
     let admin_balance = fungible::query_account(protocol_lst_id, &stake_chain, admin_account).await;
     assert_eq!(admin_balance, Some(Amount::from_tokens(100)));
 
-    // let stake_chain_recipient = fungible::Account {
-    //     chain_id: stake_chain.id(),
-    //     owner: AccountOwner::CHAIN,
-    // };
-
-    // //transfer all lst to stake chain
-    // let stake_cert = stake_chain
-    //     .add_block(|block| {
-    //         block.with_operation(
-    //             protocol_lst_id,
-    //             fungible::Operation::Transfer {
-    //                 owner: admin_account,
-    //                 amount: Amount::from_tokens(100),
-    //                 target_account: stake_chain_recipient,
-    //             },
-    //         );
-    //     })
-    //     .await;
-
     // create lst app
-    let publisher = validator.new_chain().await;
-    let lst_module_id = publisher.publish_current_module::<LstAbi, Parameters, ()>().await;
+    let lst_module_id = stake_chain.publish_current_module::<LstAbi, Parameters, ()>().await;
 
     // Creating the stake chain
     let stake_parameter = Parameters { protocol_lst: protocol_lst_id };
     let lst_id = stake_chain.create_application(lst_module_id, stake_parameter, (), vec![]).await;
+
+    let stake_chain_recipient = fungible::Account {
+        chain_id: stake_chain.id(),
+        owner: lst_id.application_description_hash.into(),
+    };
+    println!("stake_chain_recipient: {:?}", stake_chain_recipient);
+
+    //transfer all lst to stake chain
+    let stake_cert = stake_chain
+        .add_block(|block| {
+            block.with_operation(
+                protocol_lst_id,
+                fungible::Operation::Transfer {
+                    owner: admin_account,
+                    amount: Amount::from_tokens(100),
+                    target_account: stake_chain_recipient,
+                },
+            );
+        })
+        .await;
+
+    let app_owner_id = fungible::query_account(protocol_lst_id, &stake_chain, lst_id.application_description_hash.into()).await;
+    println!("app_owner_id: {:?}", app_owner_id);
+
+    println!("lst_id: {:?}", lst_id);
+    println!("stake chian id: {:?}", stake_chain.id());
 
     let stake_cert = user_chain
         .add_block(|block| {
@@ -234,11 +242,11 @@ async fn native_stake() {
         })
         .await;
 
-    // stake_chain
-    //     .add_block(|block| {
-    //         block.with_messages_from(&stake_cert);
-    //     })
-    //     .await;
+    stake_chain
+        .add_block(|block| {
+            block.with_messages_from(&stake_cert);
+        })
+        .await;
     // let contract_token_balance = fungible::query_account(token_id_a, &stake_chain, lst_id.application_description_hash.into()).await;
     // assert_eq!(contract_token_balance, Some(Amount::from_tokens(1)));
 }

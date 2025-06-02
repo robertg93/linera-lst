@@ -1,7 +1,7 @@
 use async_graphql::SimpleObject;
 
 use linera_sdk::{
-    linera_base_types::{AccountOwner, Amount, ApplicationId},
+    linera_base_types::{AccountOwner, Amount, ApplicationId, ChainId, CryptoHash},
     views::{linera_views, MapView, RegisterView, RootView, SetView, ViewStorageContext},
 };
 

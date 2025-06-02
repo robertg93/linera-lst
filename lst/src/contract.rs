@@ -4,9 +4,11 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 
 mod state;
+use std::str::FromStr;
+
 use fungible::{Account as FungibleAccount, FungibleTokenAbi};
 use linera_sdk::{
-    linera_base_types::{Account, AccountOwner, Amount, ApplicationId, WithContractAbi},
+    linera_base_types::{Account, AccountOwner, Amount, ApplicationId, ChainId, CryptoHash, WithContractAbi},
     views::{RootView, View},
     Contract, ContractRuntime,
 };
@@ -39,7 +41,9 @@ impl Contract for LstContract {
     async fn instantiate(&mut self, _: ()) {
         // Validate that the application parameters were configured correctly.
         let protocol_lst = self.runtime.application_parameters().get_protocol_lst();
+
         // self.state.protocol_lst_id.set(Some(protocol_lst.forget_abi()));
+
         self.state.approved_lst_set.insert(&protocol_lst.forget_abi()).expect("Failed to insert protocol lst id");
     }
 
@@ -50,30 +54,41 @@ impl Contract for LstContract {
             }
             Operation::StakeNative { user, amount, lst_type_out } => {
                 // check if the lst_type_out is approved
-                if !self.state.approved_lst_set.contains(&lst_type_out).await.unwrap() {
+
+                let is_protocol_lst = lst_type_out == self.runtime.application_parameters().get_protocol_lst().forget_abi();
+                let is_approved = self.state.approved_lst_set.contains(&lst_type_out).await.unwrap();
+                // type out must be approved or the protocol lst
+                if !is_approved && !is_protocol_lst {
                     panic!("Lst type out is not approved");
                 }
                 // transfer the native token to the contract
+                warn!("1");
                 let chain_id = self.runtime.chain_id();
                 let app_owner: AccountOwner = self.runtime.application_id().into();
+                warn!("2");
                 self.runtime.transfer(user, Account { chain_id, owner: app_owner }, amount);
 
                 //TODO get cureent lst price, for now we assume 1:1
                 let current_price = Amount::ONE;
                 let amount_out = amount.try_mul(current_price.into()).expect("Failed to multiply amount");
                 let lst_type_out_id = lst_type_out.with_abi::<FungibleTokenAbi>();
-
+                warn!("3");
                 //check chain balance
                 let balance = fungible::Operation::Balance { owner: app_owner };
                 let token = self.native_token_app_id();
+                warn!("token: {:?}", token);
+                warn!("lst_type_out: {:?}", lst_type_out);
+                warn!("chain id : {:?}", chain_id);
                 let balance = match self.runtime.call_application(true, token, &balance) {
                     fungible::FungibleResponse::Balance(balance) => balance,
                     response => panic!("Unexpected response from fungible token application: {response:?}"),
                 };
-
+                warn!("4");
+                warn!("owner: {:?}", app_owner);
                 warn!("balance: {:?}", balance);
 
                 // transfer the lst token to the user
+
                 self.send_to(amount_out, user, lst_type_out_id);
             }
             Operation::Stake { owner, amount } => {
