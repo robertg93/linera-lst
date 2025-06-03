@@ -70,8 +70,9 @@ impl Contract for LstContract {
 
                 //TODO get cureent lst price, for now we assume 1:1
                 let current_price = Amount::ONE;
-                let amount_out = amount.try_mul(current_price.into()).expect("Failed to multiply amount");
-                let lst_type_out_id = lst_type_out.with_abi::<FungibleTokenAbi>();
+                // let amount_out = amount.try_mul(current_price.into()).expect("Failed to multiply amount");
+                // let lst_type_out_id = lst_type_out.with_abi::<FungibleTokenAbi>();
+                let amount_out = amount;
                 warn!("3");
                 //check chain balance
                 let balance = fungible::Operation::Balance { owner: app_owner };
@@ -88,8 +89,16 @@ impl Contract for LstContract {
                 warn!("balance: {:?}", balance);
 
                 // transfer the lst token to the user
+                let message = Message::SendTokens {
+                    owner: user,
+                    token_id: self.runtime.application_parameters().get_protocol_lst(),
+                    amount: amount_out,
+                };
+                let dest_chain_id = self.get_amm_chain_id();
+                warn!("dest_chain_id: {:?}", dest_chain_id);
 
-                self.send_to(amount_out, user, lst_type_out_id);
+                self.runtime.prepare_message(message).with_authentication().send_to(dest_chain_id);
+                // self.send_to(amount_out, user, lst_type_out_id);
             }
             Operation::Stake { owner, amount } => {
                 // Check if the user already has a stake
@@ -146,13 +155,18 @@ impl Contract for LstContract {
 
     async fn execute_message(&mut self, message: Message) {
         match message {
+            Message::SendTokens { owner, token_id, amount } => {
+                warn!("Message SendTokens received");
+                warn!("owner: {:?}", owner);
+                warn!("token_id: {:?}", token_id);
+                warn!("amount: {:?}", amount);
+                let app_owner = self.runtime.application_id().into();
+                let app_owner_balance = self.runtime.call_application(true, token_id, &fungible::Operation::Balance { owner: app_owner });
+                warn!("app_owner: {:?}", app_owner);
+                warn!("app_owner_balance: {:?}", app_owner_balance);
+                self.send_to(amount, owner, token_id);
+            }
             Message::StakeLocalAccount { owner, amount } => {
-                assert_eq!(
-                    self.runtime.chain_id(),
-                    self.runtime.application_creator_chain_id(),
-                    "Action can only be executed on the chain that created the crowd-funding \
-                    campaign"
-                );
                 self.stake_from_local_account(owner, amount).await;
             }
         }
@@ -168,6 +182,10 @@ impl Contract for LstContract {
 impl LstContract {
     fn native_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
         self.runtime.application_parameters().get_protocol_lst()
+    }
+
+    fn get_amm_chain_id(&mut self) -> ChainId {
+        self.runtime.application_creator_chain_id()
     }
     // fn staked_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
     //     self.runtime.application_parameters().tokens[1]

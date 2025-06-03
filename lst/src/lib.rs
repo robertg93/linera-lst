@@ -66,4 +66,9 @@ pub enum Operation {
 pub enum Message {
     /// The order being transmitted from the chain and received by the chain of the order book.
     StakeLocalAccount { owner: AccountOwner, amount: Amount },
+    SendTokens {
+        owner: AccountOwner,
+        token_id: ApplicationId<FungibleTokenAbi>,
+        amount: Amount,
+    },
 }
