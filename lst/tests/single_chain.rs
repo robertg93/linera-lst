@@ -1,14 +1,5 @@
-// Copyright (c) Zefchain Labs, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
-//! Integration tests for the Matching Engine application
-
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::collections::HashMap;
-
-use async_graphql::InputType;
-use fungible::{Account as FungibleAccount, FungibleTokenAbi};
 use linera_sdk::{
     linera_base_types::{Account, AccountOwner, Amount, ApplicationId, ApplicationPermissions, ChainId, CryptoHash},
     test::{ActiveChain, QueryOutcome, Recipient, TestValidator},
@@ -162,7 +153,6 @@ async fn native_stake() {
 
     // create a new user chain
     let user_chain = validator.new_chain().await;
-    println!("user chain id: {:?}", user_chain.id());
     let user_account = AccountOwner::from(user_chain.public_key());
     let recipient_user = Recipient::Account(Account::new(user_chain.id(), user_account));
 
@@ -180,37 +170,37 @@ async fn native_stake() {
         })
         .await;
 
+    // check if user has native token
     let recipient_balance = user_chain.owner_balance(&user_account).await;
     assert_eq!(recipient_balance, Some(Amount::from_tokens(1000)));
-    println!("user: {:?}", user_account);
 
     // create protocol lst
     let protocol_token_module_id = stake_chain
         .publish_bytecode_files_in::<fungible::FungibleTokenAbi, fungible::Parameters, fungible::InitialState>("../fungible")
         .await;
 
+    // create protocol lst
     let initial_token_state = fungible::InitialStateBuilder::default().with_account(admin_account, Amount::from_tokens(100));
     let params_a = fungible::Parameters::new("PLST");
     let protocol_lst_id = stake_chain.create_application(protocol_token_module_id, params_a, initial_token_state.build(), vec![]).await;
 
+    // check if admin has protocol lst
     let admin_balance = fungible::query_account(protocol_lst_id, &stake_chain, admin_account).await;
     assert_eq!(admin_balance, Some(Amount::from_tokens(100)));
 
     // create lst app
     let lst_module_id = stake_chain.publish_current_module::<LstAbi, Parameters, ()>().await;
 
-    // Creating the stake chain
     let stake_parameter = Parameters { protocol_lst: protocol_lst_id };
     let lst_id = stake_chain.create_application(lst_module_id, stake_parameter, (), vec![]).await;
 
+    //transfer all lst to stake chain
     let stake_chain_recipient = fungible::Account {
         chain_id: stake_chain.id(),
         owner: lst_id.application_description_hash.into(),
     };
-    println!("stake_chain_recipient: {:?}", stake_chain_recipient);
 
-    //transfer all lst to stake chain
-    let stake_cert = stake_chain
+    stake_chain
         .add_block(|block| {
             block.with_operation(
                 protocol_lst_id,
@@ -223,12 +213,7 @@ async fn native_stake() {
         })
         .await;
 
-    let app_owner_id = fungible::query_account(protocol_lst_id, &stake_chain, lst_id.application_description_hash.into()).await;
-    println!("app_owner_id: {:?}", app_owner_id);
-
-    println!("lst_id: {:?}", lst_id);
-    println!("stake chian id: {:?}", stake_chain.id());
-
+    // stake native token and get lst by user on user chain
     let stake_cert = user_chain
         .add_block(|block| {
             block.with_operation(
@@ -242,13 +227,18 @@ async fn native_stake() {
         })
         .await;
 
+    // receive msg on stake chain (send tokens)
     stake_chain
         .add_block(|block| {
             block.with_messages_from(&stake_cert);
         })
         .await;
-    // let contract_token_balance = fungible::query_account(token_id_a, &stake_chain, lst_id.application_description_hash.into()).await;
-    // assert_eq!(contract_token_balance, Some(Amount::from_tokens(1)));
+    // check user lst balance
+    let user_balance = fungible::query_account(protocol_lst_id, &stake_chain, user_account).await;
+    assert_eq!(user_balance, Some(Amount::from_tokens(10)));
+    // check admin protocol lst balance
+    let app_native_balance = stake_chain.owner_balance(&lst_id.application_description_hash.into()).await;
+    assert_eq!(app_native_balance, Some(Amount::from_tokens(10)));
 }
 
 // #[test_log::test(tokio::test)]

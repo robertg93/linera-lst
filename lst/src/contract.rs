@@ -62,10 +62,10 @@ impl Contract for LstContract {
                     panic!("Lst type out is not approved");
                 }
                 // transfer the native token to the contract
-                warn!("1");
+
                 let chain_id = self.runtime.chain_id();
                 let app_owner: AccountOwner = self.runtime.application_id().into();
-                warn!("2");
+
                 self.runtime.transfer(user, Account { chain_id, owner: app_owner }, amount);
 
                 //TODO get cureent lst price, for now we assume 1:1
@@ -73,20 +73,6 @@ impl Contract for LstContract {
                 // let amount_out = amount.try_mul(current_price.into()).expect("Failed to multiply amount");
                 // let lst_type_out_id = lst_type_out.with_abi::<FungibleTokenAbi>();
                 let amount_out = amount;
-                warn!("3");
-                //check chain balance
-                let balance = fungible::Operation::Balance { owner: app_owner };
-                let token = self.native_token_app_id();
-                warn!("token: {:?}", token);
-                warn!("lst_type_out: {:?}", lst_type_out);
-                warn!("chain id : {:?}", chain_id);
-                let balance = match self.runtime.call_application(true, token, &balance) {
-                    fungible::FungibleResponse::Balance(balance) => balance,
-                    response => panic!("Unexpected response from fungible token application: {response:?}"),
-                };
-                warn!("4");
-                warn!("owner: {:?}", app_owner);
-                warn!("balance: {:?}", balance);
 
                 // transfer the lst token to the user
                 let message = Message::SendTokens {
@@ -95,14 +81,13 @@ impl Contract for LstContract {
                     amount: amount_out,
                 };
                 let dest_chain_id = self.get_amm_chain_id();
-                warn!("dest_chain_id: {:?}", dest_chain_id);
 
                 self.runtime.prepare_message(message).with_authentication().send_to(dest_chain_id);
                 // self.send_to(amount_out, user, lst_type_out_id);
             }
             Operation::Stake { owner, amount } => {
                 // Check if the user already has a stake
-                warn!("#####################");
+
                 let current_amount = match self.state.stake_balances.get(&owner).await {
                     Ok(Some(current)) => current,
                     Ok(None) => Amount::ZERO,
@@ -156,14 +141,6 @@ impl Contract for LstContract {
     async fn execute_message(&mut self, message: Message) {
         match message {
             Message::SendTokens { owner, token_id, amount } => {
-                warn!("Message SendTokens received");
-                warn!("owner: {:?}", owner);
-                warn!("token_id: {:?}", token_id);
-                warn!("amount: {:?}", amount);
-                let app_owner = self.runtime.application_id().into();
-                let app_owner_balance = self.runtime.call_application(true, token_id, &fungible::Operation::Balance { owner: app_owner });
-                warn!("app_owner: {:?}", app_owner);
-                warn!("app_owner_balance: {:?}", app_owner_balance);
                 self.send_to(amount, owner, token_id);
             }
             Message::StakeLocalAccount { owner, amount } => {
