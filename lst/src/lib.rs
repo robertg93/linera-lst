@@ -1,8 +1,3 @@
-// Copyright (c) Zefchain Labs, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
-/*! ABI of the Lst Example Application */
-
 use async_graphql::{scalar, Request, Response};
 use fungible::FungibleTokenAbi;
 use linera_sdk::{
@@ -25,7 +20,6 @@ impl ServiceAbi for LstAbi {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct Parameters {
-    /// The token0 and token1 used for the matching engine
     pub protocol_lst: ApplicationId<FungibleTokenAbi>,
 }
 impl Parameters {
@@ -38,27 +32,12 @@ scalar!(Parameters);
 
 #[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
 pub enum Operation {
-    NewLst {
-        token_id: ApplicationId,
-    },
-    StakeNative {
-        user: AccountOwner,
-        amount: Amount,
-        lst_type_out: ApplicationId,
-    },
-    Stake {
-        owner: AccountOwner,
-        amount: Amount,
-    },
-    /// Collect the pledges after the campaign has reached its target (campaign chain only).
-    Unstake {
-        owner: AccountOwner,
-        amount: Amount,
-    },
-    Swap {
-        owner: AccountOwner,
-        amount: Amount,
-    },
+    NewLst { token_id: ApplicationId },
+    StakeNative { user: AccountOwner, amount: Amount, lst_type_out: ApplicationId },
+    StakeLst { owner: AccountOwner, amount: Amount },
+
+    Unstake { owner: AccountOwner, amount: Amount },
+    Swap { owner: AccountOwner, amount: Amount },
     Test,
 }
 

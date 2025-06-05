@@ -1,6 +1,3 @@
-// Copyright (c) Zefchain Labs, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 #![cfg_attr(target_arch = "wasm32", no_main)]
 
 mod state;
@@ -50,6 +47,7 @@ impl Contract for LstContract {
     async fn execute_operation(&mut self, operation: Operation) -> Self::Response {
         match operation {
             Operation::NewLst { token_id } => {
+                //TODO add check
                 self.state.approved_lst_set.insert(&token_id).expect("Failed to insert token id");
             }
             Operation::StakeNative { user, amount, lst_type_out } => {
@@ -63,13 +61,14 @@ impl Contract for LstContract {
                 }
                 // transfer the native token to the contract
 
-                let chain_id = self.runtime.chain_id();
+                let chain_id = self.runtime.application_creator_chain_id();
                 let app_owner: AccountOwner = self.runtime.application_id().into();
 
+                // to do add option with remote transfer
                 self.runtime.transfer(user, Account { chain_id, owner: app_owner }, amount);
 
                 //TODO get cureent lst price, for now we assume 1:1
-                let current_price = Amount::ONE;
+                let _current_price = Amount::ONE;
                 // let amount_out = amount.try_mul(current_price.into()).expect("Failed to multiply amount");
                 // let lst_type_out_id = lst_type_out.with_abi::<FungibleTokenAbi>();
                 let amount_out = amount;
@@ -83,9 +82,8 @@ impl Contract for LstContract {
                 let dest_chain_id = self.get_amm_chain_id();
 
                 self.runtime.prepare_message(message).with_authentication().send_to(dest_chain_id);
-                // self.send_to(amount_out, user, lst_type_out_id);
             }
-            Operation::Stake { owner, amount } => {
+            Operation::StakeLst { owner, amount } => {
                 // Check if the user already has a stake
 
                 let current_amount = match self.state.stake_balances.get(&owner).await {
@@ -136,11 +134,11 @@ impl Contract for LstContract {
             }
         }
     }
-    // ANCHOR_END: execute_operation
 
     async fn execute_message(&mut self, message: Message) {
         match message {
             Message::SendTokens { owner, token_id, amount } => {
+                // TODO: ADD CHECK FOR TRANSFER AUTHORIZATION!!!
                 self.send_to(amount, owner, token_id);
             }
             Message::StakeLocalAccount { owner, amount } => {
@@ -276,7 +274,7 @@ mod tests {
         let user_keypair = AccountSecretKey::Secp256k1(Secp256k1SecretKey::generate());
         let user_pubkey = AccountOwner::from(user_keypair.public());
         let response = lst
-            .execute_operation(Operation::Stake {
+            .execute_operation(Operation::StakeLst {
                 owner: user_pubkey,
                 amount: Amount::ONE,
             })

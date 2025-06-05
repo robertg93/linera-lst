@@ -1,13 +1,10 @@
-// Copyright (c) Zefchain Labs, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 #![cfg_attr(target_arch = "wasm32", no_main)]
 
 mod state;
 
 use std::sync::Arc;
 
-use async_graphql::{EmptySubscription, Object, Request, Response, Schema};
+use async_graphql::{EmptySubscription, Request, Response, Schema};
 use linera_sdk::{graphql::GraphQLMutationRoot, linera_base_types::WithServiceAbi, views::View, Service, ServiceRuntime};
 use lst::{Operation, Parameters};
 
