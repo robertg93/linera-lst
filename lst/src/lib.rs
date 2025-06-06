@@ -2,7 +2,7 @@ use async_graphql::{scalar, Request, Response};
 use fungible::FungibleTokenAbi;
 use linera_sdk::{
     graphql::GraphQLMutationRoot,
-    linera_base_types::{AccountOwner, Amount, ApplicationId, ContractAbi, ServiceAbi},
+    linera_base_types::{AccountOwner, Amount, ApplicationId, ChainId, ContractAbi, ServiceAbi},
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,7 +34,7 @@ scalar!(Parameters);
 pub enum Operation {
     NewLst { token_id: ApplicationId },
     StakeNative { user: AccountOwner, amount: Amount, lst_type_out: ApplicationId },
-    StakeLst { owner: AccountOwner, amount: Amount },
+    StakeLst { user: AccountOwner, amount: Amount, lst_type_in: ApplicationId },
 
     Unstake { owner: AccountOwner, amount: Amount },
     Swap { owner: AccountOwner, amount: Amount },
@@ -43,11 +43,20 @@ pub enum Operation {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Message {
-    /// The order being transmitted from the chain and received by the chain of the order book.
-    StakeLocalAccount { owner: AccountOwner, amount: Amount },
-    SendTokens {
+    StakeLocalAccount {
         owner: AccountOwner,
-        token_id: ApplicationId<FungibleTokenAbi>,
         amount: Amount,
+    },
+    StakeNative {
+        user: AccountOwner,
+        amount: Amount,
+        lst_type_out: ApplicationId,
+        user_chain_id: ChainId,
+    },
+    StakeLst {
+        user: AccountOwner,
+        amount_in: Amount,
+        lst_type_in: ApplicationId,
+        user_chain_id: ChainId,
     },
 }

@@ -51,63 +51,58 @@ impl Contract for LstContract {
                 self.state.approved_lst_set.insert(&token_id).expect("Failed to insert token id");
             }
             Operation::StakeNative { user, amount, lst_type_out } => {
-                // check if the lst_type_out is approved
-
-                let is_protocol_lst = lst_type_out == self.runtime.application_parameters().get_protocol_lst().forget_abi();
-                let is_approved = self.state.approved_lst_set.contains(&lst_type_out).await.unwrap();
-                // type out must be approved or the protocol lst
-                if !is_approved && !is_protocol_lst {
-                    panic!("Lst type out is not approved");
-                }
                 // transfer the native token to the contract
-
                 let chain_id = self.runtime.application_creator_chain_id();
                 let app_owner: AccountOwner = self.runtime.application_id().into();
 
                 // to do add option with remote transfer
                 self.runtime.transfer(user, Account { chain_id, owner: app_owner }, amount);
 
-                //TODO get cureent lst price, for now we assume 1:1
-                let _current_price = Amount::ONE;
-                // let amount_out = amount.try_mul(current_price.into()).expect("Failed to multiply amount");
-                // let lst_type_out_id = lst_type_out.with_abi::<FungibleTokenAbi>();
-                let amount_out = amount;
-
-                // transfer the lst token to the user
-                let message = Message::SendTokens {
-                    owner: user,
-                    token_id: self.runtime.application_parameters().get_protocol_lst(),
-                    amount: amount_out,
+                // send message to stake chain to finish the stake
+                let message = Message::StakeNative {
+                    user,
+                    amount,
+                    lst_type_out: lst_type_out.forget_abi(),
+                    user_chain_id: self.runtime.chain_id(),
                 };
-                let dest_chain_id = self.get_amm_chain_id();
+                let dest_chain_id = self.get_app_chain_id();
 
                 self.runtime.prepare_message(message).with_authentication().send_to(dest_chain_id);
             }
-            Operation::StakeLst { owner, amount } => {
+            Operation::StakeLst { user, amount, lst_type_in } => {
+                // to do add option with remote transfer
+                warn!("1");
+                self.receive_from_user(user, amount, lst_type_in.with_abi::<FungibleTokenAbi>());
+                warn!("2");
+
+                // send message to stake chain to finish the stake
+                let message = Message::StakeLst {
+                    user,
+                    amount_in: amount,
+                    lst_type_in: lst_type_in.forget_abi(),
+                    user_chain_id: self.runtime.chain_id(),
+                };
+                let dest_chain_id = self.get_app_chain_id();
+
+                warn!("3");
+                self.runtime.prepare_message(message).with_authentication().send_to(dest_chain_id);
                 // Check if the user already has a stake
 
-                let current_amount = match self.state.stake_balances.get(&owner).await {
-                    Ok(Some(current)) => current,
-                    Ok(None) => Amount::ZERO,
-                    Err(e) => panic!("Failed to get stake balance: {}", e),
-                };
+                // let current_amount = match self.state.stake_balances.get(&owner).await {
+                //     Ok(Some(current)) => current,
+                //     Ok(None) => Amount::ZERO,
+                //     Err(e) => panic!("Failed to get stake balance: {}", e),
+                // };
 
-                // Update the stake by adding the new amount to the existing one
-                let new_amount = current_amount.try_add(amount).expect("Failed to add stake balance");
-                self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
+                // // Update the stake by adding the new amount to the existing one
+                // let new_amount = current_amount.try_add(amount).expect("Failed to add stake balance");
+                // self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
 
-                if self.runtime.chain_id() == self.runtime.application_creator_chain_id() {
-                    self.stake_from_local_account(owner, amount).await;
-                } else {
-                    self.stake_from_remote_account(owner, amount);
-                }
-                // // Transfer the native token to the contract
-                // let native_token_id = self.native_token_app_id();
-                // self.receive_from_account(owner, amount, native_token_id);
-
-                // // Transfer the staked token to the user
-                // let staked_token_id = self.staked_token_app_id();
-                // // self.send_to(amount, owner, staked_token_id);
+                // if self.runtime.chain_id() == self.runtime.application_creator_chain_id() {
+                //     self.stake_from_local_account(owner, amount).await;
+                // } else {
+                //     self.stake_from_remote_account(owner, amount);
+                // }
             }
             Operation::Unstake { owner, amount } => {
                 // Check if the user has a stake
@@ -137,12 +132,39 @@ impl Contract for LstContract {
 
     async fn execute_message(&mut self, message: Message) {
         match message {
-            Message::SendTokens { owner, token_id, amount } => {
+            Message::StakeNative {
+                user,
+                amount,
+                lst_type_out,
+                user_chain_id,
+            } => {
+                // check if the lst_type_out is approved
+                let is_protocol_lst = lst_type_out == self.runtime.application_parameters().get_protocol_lst().forget_abi();
+                let is_approved = self.state.approved_lst_set.contains(&lst_type_out).await.unwrap();
+                // type out must be approved or the protocol lst
+                if !is_approved && !is_protocol_lst {
+                    panic!("Lst type out is not approved");
+                }
+
+                //TODO get cureent lst price, for now we assume 1:1
+                let _current_price = Amount::ONE;
+                // let amount_out = amount.try_mul(current_price.into()).expect("Failed to multiply amount");
+                // let lst_type_out_id = lst_type_out.with_abi::<FungibleTokenAbi>();
+                let amount_out = amount;
                 // TODO: ADD CHECK FOR TRANSFER AUTHORIZATION!!!
-                self.send_to(amount, owner, token_id);
+                self.send_to_user(amount_out, user, lst_type_out.with_abi::<FungibleTokenAbi>(), user_chain_id);
             }
             Message::StakeLocalAccount { owner, amount } => {
                 self.stake_from_local_account(owner, amount).await;
+            }
+            Message::StakeLst {
+                user,
+                amount_in,
+                lst_type_in,
+                user_chain_id,
+            } => {
+                warn!("4");
+                self.send_to_user(amount_in, user, lst_type_in.with_abi::<FungibleTokenAbi>(), user_chain_id);
             }
         }
     }
@@ -159,14 +181,14 @@ impl LstContract {
         self.runtime.application_parameters().get_protocol_lst()
     }
 
-    fn get_amm_chain_id(&mut self) -> ChainId {
+    fn get_app_chain_id(&mut self) -> ChainId {
         self.runtime.application_creator_chain_id()
     }
     // fn staked_token_app_id(&mut self) -> ApplicationId<FungibleTokenAbi> {
     //     self.runtime.application_parameters().tokens[1]
     // }
     /// Adds a pledge from a local account to the remote campaign chain.
-    fn stake_from_remote_account(&mut self, owner: AccountOwner, amount: Amount) {
+    async fn stake_from_remote_account(&mut self, owner: AccountOwner, amount: Amount) {
         assert!(amount > Amount::ZERO, "Stake is empty");
         // The stake chain.
         let chain_id = self.runtime.application_creator_chain_id();
@@ -185,14 +207,11 @@ impl LstContract {
     async fn stake_from_local_account(&mut self, owner: AccountOwner, amount: Amount) {
         assert!(amount > Amount::ZERO, "Pledge is empty");
         let fungible_id = self.native_token_app_id();
-        self.receive_from_account(owner, amount, fungible_id);
+        self.receive_from_user(owner, amount, fungible_id);
     }
     /// Transfers `amount` tokens from the funds in custody to the `owner`'s account.
-    fn send_to(&mut self, amount: Amount, owner: AccountOwner, fungible_id: ApplicationId<FungibleTokenAbi>) {
-        let target_account = FungibleAccount {
-            chain_id: self.runtime.chain_id(),
-            owner,
-        };
+    fn send_to_user(&mut self, amount: Amount, user: AccountOwner, fungible_id: ApplicationId<FungibleTokenAbi>, user_chain_id: ChainId) {
+        let target_account = FungibleAccount { chain_id: user_chain_id, owner: user };
 
         let transfer = fungible::Operation::Transfer {
             owner: self.runtime.application_id().into(),
@@ -204,11 +223,11 @@ impl LstContract {
     }
 
     /// Calls into the Fungible Token application to receive tokens from the given account.
-    fn receive_from_account(&mut self, owner: AccountOwner, amount: Amount, fungible_id: ApplicationId<FungibleTokenAbi>) {
+    fn receive_from_user(&mut self, owner: AccountOwner, amount: Amount, fungible_id: ApplicationId<FungibleTokenAbi>) {
         let app_owner = self.runtime.application_id().into();
 
         let target_account = FungibleAccount {
-            chain_id: self.runtime.chain_id(),
+            chain_id: self.runtime.application_creator_chain_id(),
             owner: app_owner,
         };
         let transfer = fungible::Operation::Transfer { owner, amount, target_account };
@@ -275,8 +294,9 @@ mod tests {
         let user_pubkey = AccountOwner::from(user_keypair.public());
         let response = lst
             .execute_operation(Operation::StakeLst {
-                owner: user_pubkey,
+                user: user_pubkey,
                 amount: Amount::ONE,
+                lst_type_in: lst_id_staked.forget_abi(),
             })
             .blocking_wait();
 
