@@ -495,71 +495,42 @@ async fn stake_lst() {
         })
         .await;
 
-    // receive msg on stake chain (send tokens)
+    // receive msg on stake chain
     let temp = stake_chain
         .add_block(|block| {
             block.with_messages_from(&stake_cert);
         })
         .await;
 
+    // check balances before send msg to user chain
+    let user_balance = fungible::query_account(fun_token_id, &stake_chain, user_account).await;
+    // assert_eq!(user_balance, Some(Amount::from_tokens(10)));
+
+    let user_balance = fungible::query_account(fun_token_id, &user_chain, user_account).await;
+    assert_eq!(user_balance, None);
+
+    // check app native balance
+    let app_native_balance = stake_chain.owner_balance(&lst_id.application_description_hash.into()).await;
+    assert_eq!(app_native_balance, Some(Amount::from_tokens(10)));
+
+    // receive msg on user chain
     user_chain
         .add_block(|block| {
             block.with_messages_from(&temp);
         })
         .await;
 
-    // check user FUN lst balance
+    // check balances after send msg to user chain
     let user_balance = fungible::query_account(fun_token_id, &stake_chain, user_account).await;
     assert_eq!(user_balance, None);
 
     let user_balance = fungible::query_account(fun_token_id, &user_chain, user_account).await;
-    println!("user_balance: {:?}", user_balance);
+    assert_eq!(user_balance, Some(Amount::from_tokens(10)));
 
     // check app native balance
     let app_native_balance = stake_chain.owner_balance(&lst_id.application_description_hash.into()).await;
     assert_eq!(app_native_balance, Some(Amount::from_tokens(10)));
 
-    // let user_stake_chain_account = fungible::Account {
-    //     chain_id: stake_chain.id(),
-    //     owner: user_account,
-    // };
-
-    // let user_user_chain_account = fungible::Account {
-    //     chain_id: user_chain.id(),
-    //     owner: user_account,
-    // };
-    println!("1");
-
-    // //transfer all fun lst token to user chain
-    // let claim_cert = user_chain
-    //     .add_block(|block| {
-    //         block.with_operation(
-    //             fun_token_id,
-    //             fungible::Operation::Claim {
-    //                 source_account: user_stake_chain_account,
-    //                 amount: Amount::from_tokens(10),
-    //                 target_account: user_user_chain_account,
-    //             },
-    //         );
-    //     })
-    //     .await;
-    // println!("2");
-    // // receive msg on stake chain (send tokens)
-    // stake_chain
-    //     .add_block(|block| {
-    //         block.with_messages_from(&claim_cert);
-    //     })
-    //     .await;
-
-    // check user FUN lst balance
-    let user_balance = fungible::query_account(fun_token_id, &stake_chain, user_account).await;
-    assert_eq!(user_balance, None);
-    println!("2,5");
-    // check user FUN lst balance
-    let user_balance = fungible::query_account(fun_token_id, &user_chain, user_account).await;
-    println!("user_balance: {:?}", user_balance);
-    // assert_eq!(user_balance, Some(Amount::from_tokens(10)));
-    println!("3");
     // stake "FUN" lst to get protocol lst
     let stake_cert = user_chain
         .add_block(|block| {
@@ -573,7 +544,7 @@ async fn stake_lst() {
             );
         })
         .await;
-    println!("4");
+
     // receive msg on stake chain (send tokens)
     let temp = stake_chain
         .add_block(|block| {
@@ -581,7 +552,7 @@ async fn stake_lst() {
         })
         .await;
     let user_balance = fungible::query_account(protocol_lst_id, &stake_chain, user_account).await;
-    println!("user_balance: {:?}", user_balance);
+    assert_eq!(user_balance, None);
 
     user_chain
         .add_block(|block| {
@@ -589,17 +560,14 @@ async fn stake_lst() {
         })
         .await;
 
-    println!("5");
     // check user protocol lst balance
     let user_balance = fungible::query_account(protocol_lst_id, &user_chain, user_account).await;
-    // assert_eq!(user_balance, Some(Amount::from_tokens(20)));
-    println!("user_balance: {:?}", user_balance);
+    assert_eq!(user_balance, Some(Amount::from_tokens(10)));
 
     let user_balance = fungible::query_account(protocol_lst_id, &stake_chain, user_account).await;
-    // assert_eq!(user_balance, Some(Amount::from_tokens(20)));
-    println!("user_balance: {:?}", user_balance);
+    assert_eq!(user_balance, None);
 
     // check app native balance
     let app_native_balance = stake_chain.owner_balance(&lst_id.application_description_hash.into()).await;
-    assert_eq!(app_native_balance, Some(Amount::from_tokens(20)));
+    assert_eq!(app_native_balance, Some(Amount::from_tokens(10)));
 }

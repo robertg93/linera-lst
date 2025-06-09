@@ -71,38 +71,17 @@ impl Contract for LstContract {
             }
             Operation::StakeLst { user, amount, lst_type_in } => {
                 // to do add option with remote transfer
-                warn!("1");
                 self.receive_from_user(user, amount, lst_type_in.with_abi::<FungibleTokenAbi>());
-                warn!("2");
 
                 // send message to stake chain to finish the stake
                 let message = Message::StakeLst {
                     user,
                     amount_in: amount,
-                    lst_type_in: lst_type_in.forget_abi(),
                     user_chain_id: self.runtime.chain_id(),
                 };
                 let dest_chain_id = self.get_app_chain_id();
 
-                warn!("3");
                 self.runtime.prepare_message(message).with_authentication().send_to(dest_chain_id);
-                // Check if the user already has a stake
-
-                // let current_amount = match self.state.stake_balances.get(&owner).await {
-                //     Ok(Some(current)) => current,
-                //     Ok(None) => Amount::ZERO,
-                //     Err(e) => panic!("Failed to get stake balance: {}", e),
-                // };
-
-                // // Update the stake by adding the new amount to the existing one
-                // let new_amount = current_amount.try_add(amount).expect("Failed to add stake balance");
-                // self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
-
-                // if self.runtime.chain_id() == self.runtime.application_creator_chain_id() {
-                //     self.stake_from_local_account(owner, amount).await;
-                // } else {
-                //     self.stake_from_remote_account(owner, amount);
-                // }
             }
             Operation::Unstake { owner, amount } => {
                 // Check if the user has a stake
@@ -157,14 +136,9 @@ impl Contract for LstContract {
             Message::StakeLocalAccount { owner, amount } => {
                 self.stake_from_local_account(owner, amount).await;
             }
-            Message::StakeLst {
-                user,
-                amount_in,
-                lst_type_in,
-                user_chain_id,
-            } => {
-                warn!("4");
-                self.send_to_user(amount_in, user, lst_type_in.with_abi::<FungibleTokenAbi>(), user_chain_id);
+            Message::StakeLst { user, amount_in, user_chain_id } => {
+                let protocol_lst = self.runtime.application_parameters().get_protocol_lst();
+                self.send_to_user(amount_in, user, protocol_lst, user_chain_id);
             }
         }
     }

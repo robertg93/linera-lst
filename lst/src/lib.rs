@@ -56,7 +56,6 @@ pub enum Message {
     StakeLst {
         user: AccountOwner,
         amount_in: Amount,
-        lst_type_in: ApplicationId,
         user_chain_id: ChainId,
     },
 }
