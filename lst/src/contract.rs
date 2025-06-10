@@ -106,7 +106,20 @@ impl Contract for LstContract {
                 lst_type_in,
                 lst_type_out,
             } => {
-                println!("Swap operation");
+                // to do add option with remote transfer
+                self.receive_from_user(user, amount_in, lst_type_in.with_abi::<FungibleTokenAbi>());
+
+                // send message to stake chain to finish the stake
+                let message = Message::Swap {
+                    user,
+                    amount_in,
+                    lst_type_in,
+                    lst_type_out,
+                    user_chain_id: self.runtime.chain_id(),
+                };
+                let dest_chain_id = self.get_app_chain_id();
+
+                self.runtime.prepare_message(message).with_authentication().send_to(dest_chain_id);
             }
             Operation::Test => {
                 println!("Test operation");
@@ -152,7 +165,28 @@ impl Contract for LstContract {
                 lst_type_in,
                 lst_type_out,
             } => {
-                println!("Swap operation");
+                // check if the lst_type_out is approved
+                let is_protocol_lst = lst_type_out == self.runtime.application_parameters().get_protocol_lst().forget_abi();
+                let is_approved = self.state.approved_lst_set.contains(&lst_type_out).await.unwrap();
+                // type out must be approved or the protocol lst
+                if !is_approved && !is_protocol_lst {
+                    panic!("Lst type out is not approved");
+                }
+                // check if the lst_type_in is approved
+                let is_protocol_lst = lst_type_in == self.runtime.application_parameters().get_protocol_lst().forget_abi();
+                let is_approved = self.state.approved_lst_set.contains(&lst_type_in).await.unwrap();
+                // type out must be approved or the protocol lst
+                if !is_approved && !is_protocol_lst {
+                    panic!("Lst type in is not approved");
+                }
+
+                //TODO get cureent lst price, for now we assume 1:1
+                let _current_price = Amount::ONE;
+                // let amount_out = amount.try_mul(current_price.into()).expect("Failed to multiply amount");
+                // let lst_type_out_id = lst_type_out.with_abi::<FungibleTokenAbi>();
+                let amount_out = amount_in;
+                // TODO: ADD CHECK FOR TRANSFER AUTHORIZATION!!!
+                self.send_to_user(amount_out, user, lst_type_out.with_abi::<FungibleTokenAbi>(), user_chain_id);
             }
         }
     }

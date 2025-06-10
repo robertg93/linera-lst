@@ -627,13 +627,14 @@ async fn swap() {
         .await;
 
     // create protocol lst
-    let initial_token_state = fungible::InitialStateBuilder::default().with_account(admin_account, Amount::from_tokens(100));
+    let initial_plst_amount = Amount::from_tokens(1000);
+    let initial_token_state = fungible::InitialStateBuilder::default().with_account(admin_account, initial_plst_amount);
     let params_a = fungible::Parameters::new("PLST");
     let protocol_lst_id = stake_chain.create_application(protocol_token_module_id, params_a, initial_token_state.build(), vec![]).await;
 
     // check if admin has protocol lst
     let admin_balance = fungible::query_account(protocol_lst_id, &stake_chain, admin_account).await;
-    assert_eq!(admin_balance, Some(Amount::from_tokens(100)));
+    assert_eq!(admin_balance, Some(initial_plst_amount));
 
     // create lst app
     let lst_module_id = stake_chain.publish_current_module::<LstAbi, Parameters, ()>().await;
@@ -641,10 +642,12 @@ async fn swap() {
     let stake_parameter = Parameters { protocol_lst: protocol_lst_id };
     let lst_id = stake_chain.create_application(lst_module_id, stake_parameter, (), vec![]).await;
 
+    let lst_app_vault_account: AccountOwner = lst_id.application_description_hash.into();
+
     //transfer all lst to stake chain
     let lst_app_vault = fungible::Account {
         chain_id: stake_chain.id(),
-        owner: lst_id.application_description_hash.into(),
+        owner: lst_app_vault_account,
     };
 
     stake_chain
@@ -653,12 +656,15 @@ async fn swap() {
                 protocol_lst_id,
                 fungible::Operation::Transfer {
                     owner: admin_account,
-                    amount: Amount::from_tokens(100),
+                    amount: initial_plst_amount,
                     target_account: lst_app_vault,
                 },
             );
         })
         .await;
+
+    let lst_app_vault_balance = fungible::query_account(protocol_lst_id, &stake_chain, lst_app_vault_account).await;
+    assert_eq!(lst_app_vault_balance, Some(initial_plst_amount));
 
     // create new stake token "FOO"
     let foo_token_module_id = stake_chain
@@ -666,7 +672,7 @@ async fn swap() {
         .await;
 
     // create initial state for "FOO" token
-    let foo_initial_amount = Amount::from_tokens(100);
+    let foo_initial_amount = Amount::from_tokens(1000);
     let initial_foo_state = fungible::InitialStateBuilder::default().with_account(admin_account, foo_initial_amount);
     let foo_token_params = fungible::Parameters::new("FOO");
     let foo_token_id = stake_chain.create_application(foo_token_module_id, foo_token_params, initial_foo_state.build(), vec![]).await;
@@ -689,13 +695,16 @@ async fn swap() {
         })
         .await;
 
+    let lst_app_vault_balance = fungible::query_account(foo_token_id, &stake_chain, lst_app_vault_account).await;
+    assert_eq!(lst_app_vault_balance, Some(foo_initial_amount));
+
     // create new stake token "BAR"
     let bar_token_module_id = stake_chain
         .publish_bytecode_files_in::<fungible::FungibleTokenAbi, fungible::Parameters, fungible::InitialState>("../fungible")
         .await;
 
     // create initial state for "BAR" token
-    let bar_initial_amount = Amount::from_tokens(100);
+    let bar_initial_amount = Amount::from_tokens(1000);
     let initial_bar_state = fungible::InitialStateBuilder::default().with_account(admin_account, bar_initial_amount);
     let bar_token_params = fungible::Parameters::new("BAR");
     let bar_token_id = stake_chain.create_application(bar_token_module_id, bar_token_params, initial_bar_state.build(), vec![]).await;
@@ -718,25 +727,20 @@ async fn swap() {
         })
         .await;
 
+    let lst_app_vault_balance = fungible::query_account(bar_token_id, &stake_chain, lst_app_vault_account).await;
+    assert_eq!(lst_app_vault_balance, Some(bar_initial_amount));
+
     // add new FOO lst
-    let new_foo_lst_cert = stake_chain
+    stake_chain
         .add_block(|block| {
             block.with_operation(lst_id, Operation::NewLst { token_id: foo_token_id.forget_abi() });
         })
         .await;
 
     // add new BAR lst
-    let new_bar_lst_cert = stake_chain
-        .add_block(|block| {
-            block.with_operation(lst_id, Operation::NewLst { token_id: bar_token_id.forget_abi() });
-        })
-        .await;
-
-    // receive msgs on stake chain
     stake_chain
         .add_block(|block| {
-            block.with_messages_from(&new_foo_lst_cert);
-            block.with_messages_from(&new_bar_lst_cert);
+            block.with_operation(lst_id, Operation::NewLst { token_id: bar_token_id.forget_abi() });
         })
         .await;
 
@@ -747,7 +751,7 @@ async fn swap() {
                 lst_id,
                 Operation::StakeNative {
                     user: user_account,
-                    amount: Amount::from_tokens(10),
+                    amount: Amount::from_tokens(100),
                     lst_type_out: foo_token_id.forget_abi(),
                 },
             );
@@ -761,7 +765,7 @@ async fn swap() {
                 lst_id,
                 Operation::StakeNative {
                     user: user_account,
-                    amount: Amount::from_tokens(10),
+                    amount: Amount::from_tokens(100),
                     lst_type_out: bar_token_id.forget_abi(),
                 },
             );
@@ -788,6 +792,20 @@ async fn swap() {
             block.with_messages_from(&stake_bar_msg);
         })
         .await;
+    // check user FOO balance
+    // 100 - 100 native for 100 foo
+    let user_foo_balance = fungible::query_account(foo_token_id, &user_chain, user_account).await;
+    assert_eq!(user_foo_balance, Some(Amount::from_tokens(100)));
+
+    // check user BAR balance
+    // 100 - 100 native for 100 bar
+    let user_bar_balance = fungible::query_account(bar_token_id, &user_chain, user_account).await;
+    assert_eq!(user_bar_balance, Some(Amount::from_tokens(100)));
+
+    // check app native balance
+    // 200 - 2 * 100 native for 100 foo and 100 bar
+    let app_native_balance = stake_chain.owner_balance(&lst_id.application_description_hash.into()).await;
+    assert_eq!(app_native_balance, Some(Amount::from_tokens(200)));
 
     // stake "FOO" lst to get protocol lst to create pool
     let stake_foo_for_protocol_cert = user_chain
@@ -796,7 +814,7 @@ async fn swap() {
                 lst_id,
                 Operation::StakeLst {
                     user: user_account,
-                    amount: Amount::from_tokens(5),
+                    amount: Amount::from_tokens(20),
                     lst_type_in: foo_token_id.forget_abi(),
                 },
             );
@@ -817,6 +835,28 @@ async fn swap() {
         })
         .await;
 
+    // check balances after staking FOO for protocol
+    let user_foo_balance = fungible::query_account(foo_token_id, &user_chain, user_account).await;
+    let user_protocol_balance = fungible::query_account(protocol_lst_id, &user_chain, user_account).await;
+
+    // User should have:
+    // - 80 FOO (100 initial - 20 staked for protocol)
+    // - 20 PLST (from staking FOO)
+    assert_eq!(user_foo_balance, Some(Amount::from_tokens(80)));
+    assert_eq!(user_protocol_balance, Some(Amount::from_tokens(20)));
+
+    // check app balances
+    let app_foo_balance = fungible::query_account(foo_token_id, &stake_chain, AccountOwner::from(lst_id)).await;
+    let app_bar_balance = fungible::query_account(bar_token_id, &stake_chain, AccountOwner::from(lst_id)).await;
+    let app_protocol_balance = fungible::query_account(protocol_lst_id, &stake_chain, AccountOwner::from(lst_id)).await;
+
+    // App should have:
+    // - 920 FOO (1000 initial - 100 + 20)
+    // - 980 PLST (1000 initial - 20 staked for protocol)
+    assert_eq!(app_foo_balance, Some(Amount::from_tokens(920)));
+    assert_eq!(app_bar_balance, Some(Amount::from_tokens(900)));
+    assert_eq!(app_protocol_balance, Some(Amount::from_tokens(980)));
+
     // swap "BAR" for "FOO"
     let swap_cert = user_chain
         .add_block(|block| {
@@ -824,7 +864,7 @@ async fn swap() {
                 lst_id,
                 Operation::Swap {
                     user: user_account,
-                    amount_in: Amount::from_tokens(5),
+                    amount_in: Amount::from_tokens(10),
                     lst_type_in: bar_token_id.forget_abi(),
                     lst_type_out: foo_token_id.forget_abi(),
                 },
@@ -852,12 +892,12 @@ async fn swap() {
     let user_protocol_balance = fungible::query_account(protocol_lst_id, &user_chain, user_account).await;
 
     // User should have:
-    // - 5 FOO (10 from staking - 5 staked for protocol)
-    // - 5 BAR (10 from staking - 5 swapped)
-    // - 5 PLST (from staking FOO)
-    assert_eq!(user_foo_balance, Some(Amount::from_tokens(5)));
-    assert_eq!(user_bar_balance, Some(Amount::from_tokens(5)));
-    assert_eq!(user_protocol_balance, Some(Amount::from_tokens(5)));
+    // - 90 FOO (100 initial - 10 swapped)
+    // - 90 BAR (100 initial - 10 swapped)
+    // - 20 PLST (from staking FOO)
+    assert_eq!(user_foo_balance, Some(Amount::from_tokens(90)));
+    assert_eq!(user_bar_balance, Some(Amount::from_tokens(90)));
+    assert_eq!(user_protocol_balance, Some(Amount::from_tokens(20)));
 
     // check app balances
     let app_foo_balance = fungible::query_account(foo_token_id, &stake_chain, AccountOwner::from(lst_id)).await;
@@ -865,10 +905,10 @@ async fn swap() {
     let app_protocol_balance = fungible::query_account(protocol_lst_id, &stake_chain, AccountOwner::from(lst_id)).await;
 
     // App should have:
-    // - 95 FOO (100 initial - 5 in user's possession)
-    // - 95 BAR (100 initial - 5 in user's possession)
-    // - 95 PLST (100 initial - 5 in user's possession)
-    assert_eq!(app_foo_balance, Some(Amount::from_tokens(95)));
-    assert_eq!(app_bar_balance, Some(Amount::from_tokens(95)));
-    assert_eq!(app_protocol_balance, Some(Amount::from_tokens(95)));
+    // - 910 FOO (1000 initial - 100 + 20 - 10)
+    // - 910 BAR (1000 initial - 100 + 10)
+    // - 980 PLST (1000 initial - 20 staked for protocol)
+    assert_eq!(app_foo_balance, Some(Amount::from_tokens(910)));
+    assert_eq!(app_bar_balance, Some(Amount::from_tokens(910)));
+    assert_eq!(app_protocol_balance, Some(Amount::from_tokens(980)));
 }
