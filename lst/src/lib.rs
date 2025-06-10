@@ -32,12 +32,30 @@ scalar!(Parameters);
 
 #[derive(Debug, Deserialize, Serialize, GraphQLMutationRoot)]
 pub enum Operation {
-    NewLst { token_id: ApplicationId },
-    StakeNative { user: AccountOwner, amount: Amount, lst_type_out: ApplicationId },
-    StakeLst { user: AccountOwner, amount: Amount, lst_type_in: ApplicationId },
+    NewLst {
+        token_id: ApplicationId,
+    },
+    StakeNative {
+        user: AccountOwner,
+        amount: Amount,
+        lst_type_out: ApplicationId,
+    },
+    StakeLst {
+        user: AccountOwner,
+        amount: Amount,
+        lst_type_in: ApplicationId,
+    },
 
-    Unstake { owner: AccountOwner, amount: Amount },
-    Swap { owner: AccountOwner, amount: Amount },
+    Unstake {
+        owner: AccountOwner,
+        amount: Amount,
+    },
+    Swap {
+        user: AccountOwner,
+        amount_in: Amount,
+        lst_type_in: ApplicationId,
+        lst_type_out: ApplicationId,
+    },
     Test,
 }
 
@@ -57,5 +75,12 @@ pub enum Message {
         user: AccountOwner,
         amount_in: Amount,
         user_chain_id: ChainId,
+    },
+    Swap {
+        user: AccountOwner,
+        amount_in: Amount,
+        user_chain_id: ChainId,
+        lst_type_in: ApplicationId,
+        lst_type_out: ApplicationId,
     },
 }

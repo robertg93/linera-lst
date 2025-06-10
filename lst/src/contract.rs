@@ -100,7 +100,12 @@ impl Contract for LstContract {
                 let new_amount = current_amount.try_sub(amount).expect("Failed to subtract stake balance");
                 self.state.stake_balances.insert(&owner, new_amount).expect("Failed to insert stake balance");
             }
-            Operation::Swap { owner, amount } => {
+            Operation::Swap {
+                user,
+                amount_in,
+                lst_type_in,
+                lst_type_out,
+            } => {
                 println!("Swap operation");
             }
             Operation::Test => {
@@ -139,6 +144,15 @@ impl Contract for LstContract {
             Message::StakeLst { user, amount_in, user_chain_id } => {
                 let protocol_lst = self.runtime.application_parameters().get_protocol_lst();
                 self.send_to_user(amount_in, user, protocol_lst, user_chain_id);
+            }
+            Message::Swap {
+                user,
+                amount_in,
+                user_chain_id,
+                lst_type_in,
+                lst_type_out,
+            } => {
+                println!("Swap operation");
             }
         }
     }
